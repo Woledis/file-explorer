@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.filebridge.app.native.FbCore
 import com.filebridge.app.ui.AppViewModel
 import com.filebridge.app.ui.components.CenteredText
 import com.filebridge.app.ui.components.InfoRow
@@ -52,6 +53,11 @@ fun HomeScreen(viewModel: AppViewModel) {
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Text("文件桥", style = MaterialTheme.typography.titleLarge)
+        Text(
+            if (FbCore.available) "内核 ${FbCore.version}" else "内核 (Kotlin)",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
 
         StatusCard(state.running, state.url, config.encryptionEnabled, meta.passwordSet) {
             if (state.running) viewModel.stopServer() else viewModel.startServer()

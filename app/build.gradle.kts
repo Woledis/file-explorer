@@ -9,6 +9,7 @@ plugins {
 android {
     namespace = "com.filebridge.app"
     compileSdk = 34
+    ndkVersion = "25.2.9519653"
 
     defaultConfig {
         applicationId = "com.filebridge.app"
@@ -16,6 +17,10 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     buildTypes {
@@ -73,3 +78,45 @@ dependencies {
     implementation(libs.ftpserver.core)
     implementation(libs.slf4j.nop)
 }
+
+// ---- 编译 Rust 核心为 .so 并放入 jniLibs ----
+val rustDir = file("$projectDir/src/main/rust")
+val rustJniLibs = file("$projectDir/src/main/jniLibs")
+val androidAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+
+fun onPath(tool: String): Boolean {
+    val cmdEast = if (System.getProperty("os.name").lowercase().contains("win")) "where" else "which"
+    return runCatching {
+        ProcessBuilder(cmdEast, tool).redirectErrorStream(true).start().waitFor()
+    }.getOrDefault(1) == 0
+}
+
+tasks.register("buildRust") {
+    group = "build"
+    description = "Cross-compiles the Rust core to .so via cargo-ndk"
+    onlyIf { onPath("cargo-ndk") }
+    doLast {
+        val ndkHome = (System.getenv("ANDROID_NDK_HOME")
+            ?: (System.getenv("ANDROID_HOME")?.let { "$it/ndk/25.2.9519653" }))
+            ?: error("ANDROID_NDK_HOME is not set; install NDK 25.2.9519653 first")
+        delete(rustJniLibs)
+        exec {
+            workingDir = rustDir
+            environment["ANDROID_NDK_HOME"] = ndkHome
+            commandLine = buildList {
+                add("cargo")
+                add("ndk")
+                for (abi in androidAbis) {
+                    add("-t")
+                    add(abi)
+                }
+                add("-o")
+                add(rustJniLibs.absolutePath)
+                add("build")
+                add("--release")
+            }
+        }
+    }
+}
+
+tasks.named("preBuild") { dependsOn("buildRust") }
