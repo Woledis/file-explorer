@@ -1,5 +1,7 @@
 # FileBridge 文件桥
 
+[![CI 构建状态](https://github.com/Woledis/file-explorer/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Woledis/file-explorer/actions/workflows/build-apk.yml)
+
 把安卓手机变成一台局域网文件服务器：电脑用浏览器（或扫码）访问手机上的共享文件夹，支持在线浏览、下载与上传。所有访问都需要密码登录。
 
 ## 功能特性

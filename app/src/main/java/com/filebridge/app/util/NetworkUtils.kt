@@ -33,16 +33,24 @@ object NetworkUtils {
 
     private fun interfaceIp(): String? {
         return try {
-            NetworkInterface.getNetworkInterfaces()
-                ?.withIndex()
-                ?.firstOrNull { (_, ni) ->
-                    ni.isUp && !ni.isLoopback && ni.displayName.contains("wlan", ignoreCase = true)
+            val interfaces = NetworkInterface.getNetworkInterfaces()
+            if (interfaces == null) return null
+            var pick: Inet4Address? = null
+            while (interfaces.hasMoreElements()) {
+                val ni = interfaces.nextElement()
+                if (!ni.isUp || ni.isLoopback) continue
+                if (!ni.displayName.contains("wlan", ignoreCase = true)) continue
+                val e = ni.inetAddresses
+                while (e.hasMoreElements()) {
+                    val a = e.nextElement()
+                    if (a is Inet4Address) {
+                        pick = a
+                        break
+                    }
                 }
-                ?.value
-                ?.inetAddresses?.asSequence()
-                ?.filterIsInstance<Inet4Address>()
-                ?.firstOrNull()
-                ?.hostAddress
+                if (pick != null) break
+            }
+            pick?.hostAddress
         } catch (_: Exception) {
             null
         }
