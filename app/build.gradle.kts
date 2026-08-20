@@ -62,4 +62,5 @@ dependencies {
     implementation(libs.zxing.core)
     implementation(libs.conscrypt.android)
     implementation(libs.bouncycastle.bcprov)
+    implementation(libs.bouncycastle.bcpkix)
 }

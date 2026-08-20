@@ -20,7 +20,7 @@ object CryptoManager {
     private const val ALGO = "AES/GCM/NoPadding"
     private const val TAG_BITS = 128
     private const val NONCE_BYTES = 12
-    private const val MAGIC = "FBVC".toByteArray(Charsets.US_ASCII)
+    private val MAGIC = "FBVC".toByteArray(Charsets.US_ASCII)
     private const val VERSION = 1
 
     private val secureRandom = SecureRandom()
