@@ -134,10 +134,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         onChangeDone()
     }
 
-    fun changePassword(old: CharArray, new: CharArray, onChangeDone: (Boolean) -> Unit) = viewModelScope.launch {
-        val ok = withContext(Dispatchers.Default) { appCtx.security.changePassword(old, new) }
+    fun resetPassword(new: CharArray, done: () -> Unit) = viewModelScope.launch {
+        withContext(Dispatchers.Default) { appCtx.security.resetPasswordNoOld(new) }
         refreshMeta()
-        onChangeDone(ok)
+        done()
     }
 
     fun unlockVault(password: CharArray, done: (Boolean) -> Unit) = viewModelScope.launch {

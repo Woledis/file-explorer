@@ -224,68 +224,37 @@ fun SettingsScreen(viewModel: AppViewModel) {
     }
 
     if (showSet) {
-        SetPasswordDialog(
+        SinglePasswordDialog(
+            title = "设置访问密码",
+            confirm = "设置",
+            hint = "访问密码",
+            note = "这是电脑访问的唯一凭证,也用于解锁保险箱。",
             onDismiss = { showSet = false },
-            onSubmit = { new ->
-                viewModel.setPassword(new) { showSet = false }
-            },
+            onSubmit = { new -> viewModel.setPassword(new) { showSet = false } },
         )
     }
     if (showChange) {
-        ChangePasswordDialog(
+        SinglePasswordDialog(
+            title = "修改密码",
+            confirm = "保存",
+            hint = "新密码",
+            note = "填一次新密码即可。若保险箱当前未解锁,其原有内容会被重置。",
             onDismiss = { showChange = false },
-            onSubmit = { old, new -> viewModel.changePassword(old, new) { ok -> if (ok) showChange = false } },
+            onSubmit = { new -> viewModel.resetPassword(new) { showChange = false } },
         )
     }
 }
 
 @Composable
-private fun SetPasswordDialog(onDismiss: () -> Unit, onSubmit: (CharArray) -> Unit) {
-    PasswordPairDialog(title = "设置访问密码", confirm = "设置", onDismiss = onDismiss, onSubmit = onSubmit)
-}
-
-@Composable
-private fun ChangePasswordDialog(onDismiss: () -> Unit, onSubmit: (CharArray, CharArray) -> Unit) {
-    var old by remember { mutableStateOf("") }
-    var new by remember { mutableStateOf("") }
-    var again by remember { mutableStateOf("") }
-    var err by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("修改密码") },
-        text = {
-            Column {
-                OutlinedTextField(old, { old = it }, label = { Text("旧密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(new, { new = it }, label = { Text("新密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(again, { again = it }, label = { Text("再次输入新密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
-                if (err) {
-                    Spacer(Modifier.height(6.dp))
-                    Text("两次输入不一致或为空", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                if (old.isNotEmpty() && new.isNotEmpty() && new == again) onSubmit(old.toCharArray(), new.toCharArray())
-                else err = true
-            }) { Text("保存") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-    )
-}
-
-@Composable
-private fun PasswordPairDialog(
+private fun SinglePasswordDialog(
     title: String,
     confirm: String,
+    hint: String,
+    note: String,
     onDismiss: () -> Unit,
     onSubmit: (CharArray) -> Unit,
 ) {
     var pw by remember { mutableStateOf("") }
-    var again by remember { mutableStateOf("") }
     var err by remember { mutableStateOf(false) }
 
     AlertDialog(
@@ -293,19 +262,23 @@ private fun PasswordPairDialog(
         title = { Text(title) },
         text = {
             Column {
-                OutlinedTextField(pw, { pw = it }, label = { Text("访问密码") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                OutlinedTextField(
+                    pw, { pw = it },
+                    label = { Text(hint) },
+                    visualTransformation = PasswordVisualTransformation(),
+                    singleLine = true,
+                )
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(again, { again = it }, label = { Text("再次输入") }, visualTransformation = PasswordVisualTransformation(), singleLine = true)
+                Text(note, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (err) {
                     Spacer(Modifier.height(6.dp))
-                    Text("两次输入不一致或为空", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
+                    Text("密码不能为空", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium)
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
-                if (pw.isNotEmpty() && pw == again) onSubmit(pw.toCharArray())
-                else err = true
+                if (pw.isNotEmpty()) onSubmit(pw.toCharArray()) else err = true
             }) { Text(confirm) }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },

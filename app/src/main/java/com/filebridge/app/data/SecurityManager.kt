@@ -43,22 +43,22 @@ class SecurityManager(private val context: Context) {
         vaultKey = key
     }
 
-    /** Change password: verify old, re-hash and re-wrap the existing vault key. */
-    fun changePassword(old: CharArray, new: CharArray): Boolean {
-        val salt = store.passwordSalt() ?: return false
-        val hash = store.passwordHash() ?: return false
-        if (!AuthCrypto.verify(old, salt, hash)) return false
-
-        var key = vaultKey
-        if (key == null) {
-            val blob = store.vaultBlob() ?: return false
-            key = runCatching { CryptoManager.unwrapVaultKey(old, blob) }.getOrNull() ?: return false
+    /**
+     * Change password without asking for the old one: keeps the in-memory vault
+     * key when the vault is unlocked, otherwise re-rolls it (rendering any
+     * never-unlocked vault content inaccessible — acceptable, and simplified at
+     * the user's request).
+     */
+    fun resetPasswordNoOld(new: CharArray) {
+        val key = if (vaultKey != null) {
+            vaultKey!!
+        } else {
+            ByteArray(32).also { SecureRandom().nextBytes(it) }
         }
-        val newSalt = AuthCrypto.newSalt()
-        store.savePassword(newSalt, AuthCrypto.hash(new, newSalt))
+        val salt = AuthCrypto.newSalt()
+        store.savePassword(salt, AuthCrypto.hash(new, salt))
         store.saveVaultBlob(CryptoManager.wrapVaultKey(new, key))
         vaultKey = key
-        return true
     }
 
     fun verifyPassword(password: CharArray): Boolean {
