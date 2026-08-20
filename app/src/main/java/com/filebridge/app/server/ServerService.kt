@@ -27,8 +27,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.launch
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
 
 /**
  * Foreground service that owns the NanoHTTPD accept loop so file sharing
@@ -39,7 +37,6 @@ class ServerService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var server: FileServer? = null
     private var sessionStore: SessionStore? = null
-    private var executor: ExecutorService? = null
     private var pollJob: Job? = null
     // 跟踪 startRoutine 的 Job,Stop 时若启动还在进行中就取消,
     // 避免「通知已移除但 socket 还在 listen」的 Start/Stop 竞态。
@@ -80,16 +77,11 @@ class ServerService : Service() {
             docStore = app.docStore,
             sessionStore = sesStore,
         )
-        // Bounded pool: NanoHTTPD otherwise spawns an unbounded thread per
-        // connection, which piles up threads under idle keep-alive clients.
-        val pool = Executors.newFixedThreadPool(MAX_SERVER_THREADS).apply { executor = this }
-        val started = runCatching { srv.start(NanoHTTPSocketReadTimeout, false, pool) }.isSuccess
+        val started = runCatching { srv.start(NanoHTTPSocketReadTimeout, false) }.isSuccess
         // 启动期间若收到 Stop(startJob 已被 cancel),立即收尾,避免「socket 已 listen
         // 但通知已移除、UI 显示已停止」的不一致状态。
         if (!coroutineContext.isActive) {
             if (started) runCatching { srv.stop() }
-            pool.shutdownNow()
-            executor = null
             return
         }
         if (started) {
@@ -119,8 +111,6 @@ class ServerService : Service() {
                 }
             }
         } else {
-            pool.shutdownNow()
-            executor = null
             ServerController.update { it.copy(running = false, connections = 0) }
         }
     }
@@ -141,8 +131,6 @@ class ServerService : Service() {
         pollJob = null
         server?.stop()
         sessionStore?.revokeAll()
-        executor?.shutdownNow()
-        executor = null
         server = null
         sessionStore = null
         ServerController.update { it.copy(running = false, connections = 0) }
@@ -212,6 +200,5 @@ class ServerService : Service() {
         private const val CHANNEL_ID = "filebridge_service"
         private const val NOTIF_ID = 1001
         private const val NanoHTTPSocketReadTimeout = 60_000
-        private const val MAX_SERVER_THREADS = 8
     }
 }
