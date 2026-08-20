@@ -11,6 +11,10 @@ import org.nanohttpd.protocols.http.response.Response
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 
+private const val SET_COOKIE = "Set-Cookie"
+private const val MIME_HTML = "text/html"
+private const val MIME_PLAINTEXT = "text/plain"
+
 data class SharedRoot(val label: String, val treeUri: String)
 
 /**
@@ -390,11 +394,7 @@ class FileServer(
 
     // ------------------------------------------------------------------ pages
 
-    companion object {
-        const val SET_COOKIE = "Set-Cookie"
-        const val MIME_HTML = "text/html"
-        const val MIME_PLAINTEXT = "text/plain"
-    }
+    
 }
 
 private fun PAGE_LOGIN(error: Boolean, message: String): String {
