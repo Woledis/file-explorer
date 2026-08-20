@@ -5,7 +5,7 @@
 //! probe). The HTTP/FTP/crypto cores get migrated into this crate in later
 //! milestones; until then Kotlin keeps its current servers.
 
-use jni::objects::{JClass, JString};
+use jni::objects::JClass;
 use jni::sys::{jint, jstring};
 use jni::JNIEnv;
 
@@ -13,7 +13,7 @@ const VERSION: &str = "filebridge-rs 0.1.0";
 
 #[no_mangle]
 pub extern "system" fn Java_com_filebridge_app_native_FbCore_ping<'local>(
-    mut env: JNIEnv<'local>,
+    env: JNIEnv<'local>,
     _class: JClass<'local>,
 ) -> jstring {
     let s = env.new_string(VERSION).expect("new_string failed");
