@@ -2,8 +2,11 @@ package com.filebridge.app.ui.screens
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,7 +24,10 @@ fun ConnectionsScreen(viewModel: AppViewModel) {
     val state by viewModel.serverState.collectAsState()
     val config by viewModel.config.collectAsState()
 
-    Column(Modifier.fillMaxWidth().padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
         Text("连接记录", style = MaterialTheme.typography.titleLarge)
 
         SectionCard("运行状态") {
