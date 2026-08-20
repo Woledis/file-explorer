@@ -27,7 +27,7 @@ class LocalFs(private val root: File) : FileSystemView {
     @Volatile private var cacheAt: Long = 0L
     @Volatile private var cacheFiles: Array<File>? = null
 
-    private fun listCached(dir: File): Array<File>? {
+    internal fun listCached(dir: File): Array<File>? {
         val now = System.currentTimeMillis()
         val key = dir.canonicalPath
         val cached = cacheFiles
