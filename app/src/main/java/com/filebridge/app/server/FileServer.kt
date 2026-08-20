@@ -4,11 +4,8 @@ import android.net.Uri
 import com.filebridge.app.crypto.TlsUtil
 import com.filebridge.app.data.DocStore
 import com.filebridge.app.data.SecurityManager
-import org.nanohttpd.protocols.http.IHTTPSession
-import org.nanohttpd.protocols.http.NanoHTTPD
-import org.nanohttpd.protocols.http.request.Method
-import org.nanohttpd.protocols.http.response.Response
 import java.util.Base64
+import fi.iki.elonen.NanoHTTPD
 import java.util.concurrent.ConcurrentHashMap
 
 private const val SET_COOKIE = "Set-Cookie"
@@ -42,20 +39,20 @@ class FileServer(
 
     // ------------------------------------------------------------------ routes
 
-    override fun serve(session: IHTTPSession): Response {
+    override fun serve(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         return try {
             route(session)
         } catch (e: Exception) {
-            newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "internal error")
+            newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "internal error")
         }
     }
 
-    private fun route(session: IHTTPSession): Response {
+    private fun route(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         val uri = session.uri
 
         if (uri == "/login") {
-            if (session.method == Method.POST) return handleLogin(session)
-            if (session.method == Method.GET) {
+            if (session.method == NanoHTTPD.Method.POST) return handleLogin(session)
+            if (session.method == NanoHTTPD.Method.GET) {
                 val err = session.parms?.get("error") == "1"
                 return renderLogin(err)
             }
@@ -68,8 +65,8 @@ class FileServer(
 
         val token = cookieToken(session)
         if (token == null || !sessionStore.isValid(token)) {
-            return if (session.method == Method.PUT) {
-                text(Response.Status.FORBIDDEN, "forbidden: not signed in")
+            return if (session.method == NanoHTTPD.Method.PUT) {
+                text(NanoHTTPD.Response.Status.FORBIDDEN, "forbidden: not signed in")
             } else {
                 redirect("/login")
             }
@@ -79,10 +76,10 @@ class FileServer(
             uri == "/" -> renderHome()
             uri == "/list" -> handleList(session)
             uri == "/dl" -> handleDownload(session)
-            uri == "/up" && session.method == Method.PUT -> handleUpload(session)
+            uri == "/up" && session.method == NanoHTTPD.Method.PUT -> handleUpload(session)
             uri == "/vault" && vaultEnabled -> handleVaultList()
             uri == "/vault/dl" && vaultEnabled -> handleVaultDownload(session)
-            uri == "/vault/up" && session.method == Method.PUT && vaultEnabled -> handleVaultUpload(session)
+            uri == "/vault/up" && session.method == NanoHTTPD.Method.PUT && vaultEnabled -> handleVaultUpload(session)
             uri == "/vault/del" && vaultEnabled -> handleVaultDelete(session)
             else -> notFound()
         }
@@ -90,7 +87,7 @@ class FileServer(
 
     // ------------------------------------------------------------------ auth
 
-    private fun handleLogin(session: IHTTPSession): Response {
+    private fun handleLogin(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         session.parseBody(HashMap())
         val password = (session.parms ?: emptyMap())["password"]?.toCharArray() ?: charArrayOf()
         val remoteIp = session.remoteIp ?: "unknown"
@@ -109,7 +106,7 @@ class FileServer(
         return renderLogin(true, "密码错误")
     }
 
-    private fun cookieToken(session: IHTTPSession): String? {
+    private fun cookieToken(session: NanoHTTPD.IHTTPSession): String? {
         val cookies = session.headers?.get("cookie") ?: return null
         return cookies.split(';').map { it.trim() }
             .firstOrNull { it.startsWith("fb_session=") }
@@ -118,7 +115,7 @@ class FileServer(
 
     // ------------------------------------------------------------------ browser UI
 
-    private fun handleList(session: IHTTPSession): Response {
+    private fun handleList(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         val tree = decode(session.parms?.get("tree")) ?: return notFound()
         if (sharedRoots.none { it.treeUri == tree }) return forbidden()
         val root = sharedRoots.first { it.treeUri == tree }
@@ -127,7 +124,7 @@ class FileServer(
         return renderList(root, docId, entries)
     }
 
-    private fun handleDownload(session: IHTTPSession): Response {
+    private fun handleDownload(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         val tree = decode(session.parms?.get("tree")) ?: return notFound()
         if (sharedRoots.none { it.treeUri == tree }) return forbidden()
         val docId = decode(session.parms?.get("doc")) ?: return notFound()
@@ -135,41 +132,41 @@ class FileServer(
         return streamResponse(opened)
     }
 
-    private fun handleUpload(session: IHTTPSession): Response {
+    private fun handleUpload(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         val tree = decode(session.parms?.get("tree")) ?: return notFound()
         if (sharedRoots.none { it.treeUri == tree }) return forbidden()
         val docId = decode(session.parms?.get("doc")) ?: return notFound()
-        val rawName = session.headers?.get("x-file-name") ?: return text(Response.Status.BAD_REQUEST, "missing file name")
+        val rawName = session.headers?.get("x-file-name") ?: return text(NanoHTTPD.Response.Status.BAD_REQUEST, "missing file name")
         val name = String(Base64.getUrlDecoder().decode(rawName), Charsets.UTF_8)
-        val target = docStore.openWrite(Uri.parse(tree), docId, name) ?: return text(Response.Status.BAD_REQUEST, "cannot write")
+        val target = docStore.openWrite(Uri.parse(tree), docId, name) ?: return text(NanoHTTPD.Response.Status.BAD_REQUEST, "cannot write")
 
         target.output.use { out ->
             session.inputStream.use { it.copyTo(out, 256 * 1024) }
         }
-        return text(Response.Status.OK, "ok")
+        return text(NanoHTTPD.Response.Status.OK, "ok")
     }
 
-    private fun handleVaultList(): Response = renderVault()
+    private fun handleVaultList(): NanoHTTPD.Response = renderVault()
 
-    private fun handleVaultDownload(session: IHTTPSession): Response {
+    private fun handleVaultDownload(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         val name = String(Base64.getUrlDecoder().decode(session.parms?.get("name") ?: ""), Charsets.UTF_8)
         val stream = security.open(name) ?: return notFound()
-        return newChunkedResponse(Response.Status.OK, mime(name), stream).also {
+        return newChunkedResponse(NanoHTTPD.Response.Status.OK, mime(name), stream).also {
             it.addHeader("Content-Disposition", "attachment; filename*=UTF-8''${percentEncode(name)}")
         }
     }
 
-    private fun handleVaultUpload(session: IHTTPSession): Response {
-        if (!security.vaultUnlocked) return text(Response.Status.FORBIDDEN, "vault locked on phone")
-        val rawName = session.headers?.get("x-file-name") ?: return text(Response.Status.BAD_REQUEST, "missing file name")
+    private fun handleVaultUpload(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
+        if (!security.vaultUnlocked) return text(NanoHTTPD.Response.Status.FORBIDDEN, "vault locked on phone")
+        val rawName = session.headers?.get("x-file-name") ?: return text(NanoHTTPD.Response.Status.BAD_REQUEST, "missing file name")
         val name = String(Base64.getUrlDecoder().decode(rawName), Charsets.UTF_8)
         val ok = runCatching {
             security.encrypt(name, session.inputStream)
         }.getOrDefault(false)
-        return if (ok) text(Response.Status.OK, "ok") else text(Response.Status.INTERNAL_ERROR, "encrypt failed")
+        return if (ok) text(NanoHTTPD.Response.Status.OK, "ok") else text(NanoHTTPD.Response.Status.INTERNAL_ERROR, "encrypt failed")
     }
 
-    private fun handleVaultDelete(session: IHTTPSession): Response {
+    private fun handleVaultDelete(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         val name = String(Base64.getUrlDecoder().decode(session.parms?.get("name") ?: ""), Charsets.UTF_8)
         security.delete(name)
         return redirect("/vault")
@@ -177,10 +174,10 @@ class FileServer(
 
     // ------------------------------------------------------------------ render
 
-    private fun renderLogin(error: Boolean, message: String = "请输入访问密码"): Response =
-        newFixedLengthResponse(Response.Status.OK, MIME_HTML, PAGE_LOGIN(error, message))
+    private fun renderLogin(error: Boolean, message: String = "请输入访问密码"): NanoHTTPD.Response =
+        newFixedLengthResponse(NanoHTTPD.Response.Status.OK, MIME_HTML, PAGE_LOGIN(error, message))
 
-    private fun renderHome(): Response {
+    private fun renderHome(): NanoHTTPD.Response {
         return page("FileBridge", "", """
             <div class="panel">
               <h2>共享的文件夹</h2>
@@ -192,7 +189,7 @@ class FileServer(
         """.trimIndent())
     }
 
-    private fun renderList(root: SharedRoot, docId: String, entries: List<DocStore.DocEntry>): Response {
+    private fun renderList(root: SharedRoot, docId: String, entries: List<DocStore.DocEntry>): NanoHTTPD.Response {
         val treeParam = enc(root.treeUri)
         val crumbs = breadcrumbs(root, docId)
         val rows = StringBuilder()
@@ -222,7 +219,7 @@ class FileServer(
         return page(root.label, treeParam, body)
     }
 
-    private fun renderVault(): Response {
+    private fun renderVault(): NanoHTTPD.Response {
         val entries = security.list()
         val rows = entries.joinToString("") {
             "<li class='file'><a class='name' href='/vault/dl?name=${enc(it.name)}' download>🔒 ${esc(it.name)}</a>" +
@@ -296,18 +293,18 @@ class FileServer(
         return docId.substringBeforeLast('/').takeIf { it.isNotEmpty() } ?: rootId
     }
 
-    private fun page(title: String, active: String, body: String): Response {
+    private fun page(title: String, active: String, body: String): NanoHTTPD.Response {
         val html = PAGE_SHELL(title) { tabs(active) + body }
-        return newFixedLengthResponse(Response.Status.OK, MIME_HTML, html)
+        return newFixedLengthResponse(NanoHTTPD.Response.Status.OK, MIME_HTML, html)
     }
 
     // ------------------------------------------------------------------ helpers
 
-    private fun streamResponse(opened: DocStore.OpenedDoc): Response {
+    private fun streamResponse(opened: DocStore.OpenedDoc): NanoHTTPD.Response {
         val resp = if (opened.size >= 0) {
-            newFixedLengthResponse(Response.Status.OK, mime(opened.name), opened.stream, opened.size)
+            newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime(opened.name), opened.stream, opened.size)
         } else {
-            newChunkedResponse(Response.Status.OK, mime(opened.name), opened.stream)
+            newChunkedResponse(NanoHTTPD.Response.Status.OK, mime(opened.name), opened.stream)
         }
         resp.addHeader("Content-Disposition", "attachment; filename*=UTF-8''${percentEncode(opened.name)}")
         return resp
@@ -316,22 +313,22 @@ class FileServer(
     private fun rootDocId(treeUri: String): String =
         android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(treeUri))
 
-    private fun redirect(location: String): Response {
-        return newFixedLengthResponse(Response.Status.REDIRECT, "text/plain", "").also {
+    private fun redirect(location: String): NanoHTTPD.Response {
+        return newFixedLengthResponse(NanoHTTPD.Response.Status.REDIRECT, "text/plain", "").also {
             it.addHeader("Location", location)
         }
     }
 
-    private fun text(status: Response.Status, s: String): Response {
+    private fun text(status: NanoHTTPD.Response.Status, s: String): NanoHTTPD.Response {
         return newFixedLengthResponse(status, MIME_PLAINTEXT, s)
     }
 
-    private fun notFound(): Response {
-        return text(Response.Status.NOT_FOUND, "not found")
+    private fun notFound(): NanoHTTPD.Response {
+        return text(NanoHTTPD.Response.Status.NOT_FOUND, "not found")
     }
 
-    private fun forbidden(): Response {
-        return text(Response.Status.FORBIDDEN, "forbidden")
+    private fun forbidden(): NanoHTTPD.Response {
+        return text(NanoHTTPD.Response.Status.FORBIDDEN, "forbidden")
     }
 
     private fun enc(s: String): String =
