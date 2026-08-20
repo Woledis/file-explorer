@@ -30,6 +30,13 @@ class FtpVfs(
 ) {
     private val resolver get() = context.applicationContext.contentResolver
 
+    // 目录列表短期缓存(1s):和 LocalFs 一致,避免 Windows 对同一目录反复 LIST 时
+    // 每次都重发 SAF 查询(ContentResolver.query 走系统进程,较慢)。
+    private val cacheTtlMs = 1000L
+    @Volatile private var cacheDir: String? = null
+    @Volatile private var cacheAt: Long = 0L
+    @Volatile private var cacheEntries: List<Node>? = null
+
     data class Node(
         val path: String,
         val treeUri: Uri?,
@@ -83,6 +90,16 @@ class FtpVfs(
 
     fun list(node: Node): List<Node> {
         if (!node.exists || !node.isDir) return emptyList()
+        val key = node.path
+        val now = System.currentTimeMillis()
+        val cached = cacheEntries
+        if (cacheDir == key && cached != null && now - cacheAt < cacheTtlMs) return cached
+        val result = listInner(node)
+        cacheDir = key; cacheAt = now; cacheEntries = result
+        return result
+    }
+
+    private fun listInner(node: Node): List<Node> {
         if (node.path == "/") {
             return roots.map { r ->
                 runCatching {
