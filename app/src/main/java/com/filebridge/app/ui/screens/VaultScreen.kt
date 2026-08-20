@@ -24,9 +24,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -94,8 +94,9 @@ fun VaultScreen(viewModel: AppViewModel) {
 @Composable
 private fun VaultContent(viewModel: AppViewModel) {
     val context = LocalContext.current
-    var version by remember { mutableIntStateOf(0) }
-    val entries = remember(version) { viewModel.vaultList() }
+    // 直接读 StateFlow,不在主线程跑 listFiles();进入页面时拉一次后台刷新。
+    val entries by viewModel.vaultEntries.collectAsState()
+    LaunchedEffect(Unit) { viewModel.refreshVault() }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let {
@@ -107,7 +108,8 @@ private fun VaultContent(viewModel: AppViewModel) {
             }
             val input = context.contentResolver.openInputStream(it)
             if (input != null) {
-                viewModel.addToVault(name, input) { if (it) version++ }
+                // encrypt 完成后 ViewModel 已自动 refreshVault(),UI 自动更新,不再手动 version++。
+                viewModel.addToVault(name, input) {}
             }
         }
     }
@@ -149,7 +151,7 @@ private fun VaultContent(viewModel: AppViewModel) {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                IconButton(onClick = { viewModel.deleteVault(e.name); version++ }) {
+                IconButton(onClick = { viewModel.deleteVault(e.name) }) {
                     Icon(Icons.Filled.DeleteOutline, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
                 }
             }

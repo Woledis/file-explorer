@@ -38,7 +38,9 @@ class SettingsStore(private val context: Context) {
             tlsEnabled = p[Keys.TLS] ?: false,
             sessionTimeoutMin = p[Keys.TIMEOUT] ?: 30,
             encryptionEnabled = p[Keys.ENCRYPTION] ?: false,
-            sharedUris = (p[Keys.SHARED] ?: emptySet()).toList(),
+            // DataStore 的 stringSetPreferencesKey 读出来的 Set 顺序不保证,
+            // 排序后再 toList,UI 列表项不会每次启动都抖动。
+            sharedUris = (p[Keys.SHARED] ?: emptySet()).toSortedSet().toList(),
         )
     }
 

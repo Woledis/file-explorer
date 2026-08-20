@@ -40,6 +40,9 @@ class ServerService : Service() {
     private var sessionStore: SessionStore? = null
     private var executor: ExecutorService? = null
     private var pollJob: Job? = null
+    // 跟踪 startRoutine 的 Job,Stop 时若启动还在进行中就取消,
+    // 避免「通知已移除但 socket 还在 listen」的 Start/Stop 竞态。
+    private var startJob: Job? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -53,7 +56,8 @@ class ServerService : Service() {
             ACTION_STOP -> stopEverything()
             else -> {
                 startForegroundCompat()
-                scope.launch { startRoutine() }
+                startJob?.cancel()
+                startJob = scope.launch { startRoutine() }
             }
         }
         return START_STICKY
@@ -79,6 +83,14 @@ class ServerService : Service() {
         // connection, which piles up threads under idle keep-alive clients.
         val pool = Executors.newFixedThreadPool(MAX_SERVER_THREADS).apply { executor = this }
         val started = runCatching { srv.start(NanoHTTPSocketReadTimeout, false, pool) }.isSuccess
+        // 启动期间若收到 Stop(startJob 已被 cancel),立即收尾,避免「socket 已 listen
+        // 但通知已移除、UI 显示已停止」的不一致状态。
+        if (!coroutineContext.isActive) {
+            if (started) runCatching { srv.stop() }
+            pool.shutdownNow()
+            executor = null
+            return
+        }
         if (started) {
             server = srv
             sessionStore = sesStore
@@ -122,7 +134,10 @@ class ServerService : Service() {
     }
 
     private fun stopEverything() {
+        startJob?.cancel()
+        startJob = null
         pollJob?.cancel()
+        pollJob = null
         server?.stop()
         sessionStore?.revokeAll()
         executor?.shutdownNow()

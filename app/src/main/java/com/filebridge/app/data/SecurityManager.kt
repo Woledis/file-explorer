@@ -98,19 +98,33 @@ class SecurityManager(private val context: Context) {
     /** Encrypt [input] under the name [plainName] into the vault. */
     fun encrypt(plainName: String, input: InputStream): Boolean {
         val key = vaultKey ?: return false
-        return runCatching {
-            val safe = encFileName(plainName)
-            val tmp = File(vaultDir, "$safe.tmp")
-            CryptoManager.encryptStream(
-                key,
-                BufferedInputStream(input),
-                BufferedOutputStream(FileOutputStream(tmp))
-            )
-            val dest = File(vaultDir, safe)
-            dest.delete()
-            tmp.renameTo(dest)
+        val safe = encFileName(plainName)
+        val tmp = File(vaultDir, "$safe.tmp")
+        val dest = File(vaultDir, safe)
+        return try {
+            // 关闭 plain 会顺带关闭底层 input(由调用方传入,如 session.inputStream)。
+            BufferedInputStream(input).use { plain ->
+                CryptoManager.encryptStream(
+                    key,
+                    plain,
+                    BufferedOutputStream(FileOutputStream(tmp))
+                )
+            }
+            // 先删旧目标;若旧文件存在且删除失败,放弃替换,清理临时文件。
+            if (dest.exists() && !dest.delete()) {
+                tmp.delete()
+                return false
+            }
+            // renameTo 失败时不能返回 true,否则用户以为已加密入库但列表中不可见。
+            if (!tmp.renameTo(dest)) {
+                tmp.delete()
+                return false
+            }
             true
-        }.getOrElse { false }
+        } catch (_: Exception) {
+            tmp.delete()
+            false
+        }
     }
 
     /** Open a decrypted stream of a vault entry. */
@@ -118,8 +132,14 @@ class SecurityManager(private val context: Context) {
         val key = vaultKey ?: return null
         val f = File(vaultDir, encFileName(name))
         if (!f.exists()) return null
-        return runCatching { CryptoManager.decryptStream(key, BufferedInputStream(FileInputStream(f))) }
-            .getOrNull()
+        // decryptStream 读取头部时若抛出,必须关闭底层流,否则 FileInputStream 泄漏。
+        val bis = BufferedInputStream(FileInputStream(f))
+        return try {
+            CryptoManager.decryptStream(key, bis)
+        } catch (_: Exception) {
+            bis.close()
+            null
+        }
     }
 
     fun delete(name: String): Boolean {

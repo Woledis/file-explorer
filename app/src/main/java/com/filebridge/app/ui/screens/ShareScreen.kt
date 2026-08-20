@@ -33,6 +33,7 @@ import com.filebridge.app.ui.components.SectionCard
 @Composable
 fun ShareScreen(viewModel: AppViewModel) {
     val config by viewModel.config.collectAsState()
+    val labels by viewModel.shareLabels.collectAsState()
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         uri?.let { viewModel.addShare(it) }
@@ -66,7 +67,8 @@ fun ShareScreen(viewModel: AppViewModel) {
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(
-                            viewModel.shareLabel(uri),
+                            // 直接读缓存 Map,缓存未就绪时退到 URI 末段,不再每次重组都跑 SAF 查询。
+                            labels[uri] ?: uri.substringAfterLast(":"),
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,

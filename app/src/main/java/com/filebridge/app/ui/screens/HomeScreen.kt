@@ -19,10 +19,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -34,6 +35,8 @@ import com.filebridge.app.ui.components.InfoRow
 import com.filebridge.app.ui.components.SectionCard
 import com.filebridge.app.ui.components.StatusDot
 import com.filebridge.app.util.QrUtils
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun HomeScreen(viewModel: AppViewModel) {
@@ -141,8 +144,11 @@ private fun StatusCard(
 
 @Composable
 private fun QrBlock(state: com.filebridge.app.server.ServerController.UiState) {
-    val qr = remember(state.url) {
-        state.url.takeIf { it.isNotEmpty() }?.let { QrUtils.toBitmap(it, 480) }?.asImageBitmap()
+    // 二维码生成放到 Default 线程,避免阻塞 Compose 主线程;尺寸 320 对 210dp 显示已经足够清晰。
+    val qr by produceState<ImageBitmap?>(initialValue = null, state.url) {
+        val url = state.url
+        value = if (url.isEmpty()) null
+        else withContext(Dispatchers.Default) { QrUtils.toBitmap(url, 320).asImageBitmap() }
     }
     Column(Modifier.fillMaxWidth()) {
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {

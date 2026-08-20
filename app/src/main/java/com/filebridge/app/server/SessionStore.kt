@@ -23,13 +23,17 @@ class SessionStore(private val timeoutMs: Long) {
     /** Returns true (and refreshes lastSeen) when [token] is currently valid. */
     fun isValid(token: String): Boolean {
         val now = System.currentTimeMillis()
-        val last = sessions[token] ?: return false
-        if (now - last > timeoutMs) {
-            sessions.remove(token)
-            return false
+        // 用 compute 原子完成「读取-检查-刷新/删除」,避免 revoke 与 isValid 之间
+        // 出现「先读到值,revoke 删了,isValid 又把它写回」的复活竞争。
+        var valid = false
+        sessions.compute(token) { _, last ->
+            when {
+                last == null -> null
+                now - last > timeoutMs -> null
+                else -> { valid = true; now }
+            }
         }
-        sessions[token] = now
-        return true
+        return valid
     }
 
     fun revoke(token: String?) {

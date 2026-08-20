@@ -186,6 +186,7 @@ class FileServer(
               ${if (vaultEnabled) "<p class='muted'>同时提供 <a href='/vault'>🔒 保险箱</a>（加密文件）</p>" else ""}
             </div>
         """.trimIndent())
+    }
 
     private fun renderList(root: SharedRoot, docId: String, entries: List<DocStore.DocEntry>): Response {
         val treeParam = enc(root.treeUri)
@@ -481,8 +482,12 @@ private class LoginGuard {
 
     fun fail(ip: String) {
         val now = System.currentTimeMillis()
-        val s = map.computeIfAbsent(ip) { State(0, now) }
-        if (now - s.windowStart > WINDOW) { s.windowStart = now; s.fails = 1 } else s.fails++
+        // 用 compute 原子地完成「窗口重置 / 计数累加」,避免 computeIfAbsent + 直接 mutate
+        // 在并发失败场景下丢计数。
+        map.compute(ip) { _, cur ->
+            if (cur == null || now - cur.windowStart > WINDOW) State(1, now)
+            else State(cur.fails + 1, cur.windowStart)
+        }
     }
 
     fun success(ip: String) { map.remove(ip) }
