@@ -72,7 +72,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
             if (Environment.isExternalStorageManager()) {
                 viewModel.setFtpAllFiles(true)
             } else {
-                context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_SETTINGS))
+                context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
                 viewModel.setFtpAllFiles(true)
             }
         } else {

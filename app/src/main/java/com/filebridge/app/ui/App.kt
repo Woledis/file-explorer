@@ -1,5 +1,6 @@
 package com.filebridge.app.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -55,6 +56,7 @@ fun App(viewModel: AppViewModel = viewModel()) {
     FileBridgeTheme(darkTheme = darkTheme) { AppContent(viewModel) }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AppContent(viewModel: AppViewModel) {
     val pagerState = rememberPagerState(initialPage = 0) { Destination.entries.size }
