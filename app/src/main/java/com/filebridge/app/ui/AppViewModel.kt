@@ -104,6 +104,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setTls(enabled: Boolean) = viewModelScope.launch { store.setTls(enabled) }
     fun setTimeout(min: Int) = viewModelScope.launch { store.setTimeout(min) }
     fun setEncryption(enabled: Boolean) = viewModelScope.launch { store.setEncryption(enabled) }
+    fun setFtpEnabled(enabled: Boolean) = viewModelScope.launch { store.setFtpEnabled(enabled) }
+    fun setFtpPort(port: Int) = viewModelScope.launch { store.setFtpPort(port) }
 
     // ---- shares ----
 

@@ -70,4 +70,6 @@ dependencies {
     implementation(libs.conscrypt.android)
     implementation(libs.bouncycastle.bcprov)
     implementation(libs.bouncycastle.bcpkix)
+    implementation(libs.ftpserver.core)
+    implementation(libs.slf4j.nop)
 }

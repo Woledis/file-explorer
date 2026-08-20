@@ -61,6 +61,7 @@ fun HomeScreen(viewModel: AppViewModel) {
             SectionCard("访问信息") {
                 InfoRow("访问地址", state.url, Modifier)
                 InfoRow("传输", if (state.tls) "HTTPS（已加密）" else "HTTP", Modifier)
+                if (state.ftpRunning) InfoRow("FTP 地址", state.ftpUrl, Modifier)
                 QrBlock(state)
             }
             SectionCard("已共享") {

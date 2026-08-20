@@ -36,6 +36,7 @@ class ServerService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var server: FileServer? = null
+    private var ftpManager: FtpManager? = null
     private var sessionStore: SessionStore? = null
     private var pollJob: Job? = null
     // 跟踪 startRoutine 的 Job,Stop 时若启动还在进行中就取消,
@@ -113,6 +114,19 @@ class ServerService : Service() {
         } else {
             ServerController.update { it.copy(running = false, connections = 0) }
         }
+
+        // FTP server follows its own user-facing toggle; web and FTP are independent.
+        if (cfg.ftpEnabled) {
+            val fm = FtpManager(this, roots)
+            if (fm.start(cfg.ftpPort)) {
+                ftpManager = fm
+                ServerController.update { it.copy(ftpRunning = true, ftpPort = cfg.ftpPort) }
+            } else {
+                ServerController.update { it.copy(ftpRunning = false, ftpPort = 0) }
+            }
+        } else {
+            ServerController.update { it.copy(ftpRunning = false, ftpPort = 0) }
+        }
     }
 
     private fun uriToRoot(uri: String, docStore: DocStore): SharedRoot? {
@@ -130,10 +144,12 @@ class ServerService : Service() {
         pollJob?.cancel()
         pollJob = null
         server?.stop()
+        ftpManager?.stop()
+        ftpManager = null
         sessionStore?.revokeAll()
         server = null
         sessionStore = null
-        ServerController.update { it.copy(running = false, connections = 0) }
+        ServerController.update { it.copy(running = false, connections = 0, ftpRunning = false, ftpPort = 0) }
         stopForegroundCompat()
         stopSelf()
     }

@@ -18,9 +18,12 @@ object ServerController {
         val timeoutMin: Int = 30,
         val connections: Int = 0,
         val encrypted: Boolean = false,
+        val ftpRunning: Boolean = false,
+        val ftpPort: Int = 0,
     ) {
         val scheme: String get() = if (tls) "https" else "http"
         val url: String get() = if (running) "$scheme://$host:$port" else ""
+        val ftpUrl: String get() = if (ftpRunning && host.isNotEmpty()) "ftp://$host:$ftpPort" else ""
     }
 
     private val _state = MutableStateFlow(UiState())

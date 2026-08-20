@@ -46,6 +46,7 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var showSet by remember { mutableStateOf(false) }
     var showChange by remember { mutableStateOf(false) }
     var portText by remember(config.port) { mutableStateOf(config.port.toString()) }
+    var ftpPortText by remember(config.ftpPort) { mutableStateOf(config.ftpPort.toString()) }
     val timeouts = listOf(10, 30, 60, 120)
 
     Column(
@@ -123,6 +124,40 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     Text("${min} 分钟", modifier = Modifier.padding(start = 8.dp))
                 }
             }
+        }
+
+        SectionCard("FTP 服务器") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("启用 FTP", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "用电脑上的 FTP 客户端（资源管理器 / FileZilla）直接访问，可上传和下载",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = config.ftpEnabled, onCheckedChange = { viewModel.setFtpEnabled(it) })
+            }
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = ftpPortText,
+                onValueChange = { ftpPortText = it },
+                label = { Text("FTP 端口") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+                enabled = config.ftpEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                TextButton(onClick = {
+                    ftpPortText.toIntOrNull()?.takeIf { it in 1..65535 }?.let { viewModel.setFtpPort(it) }
+                }) { Text("保存端口") }
+            }
+            Text(
+                "FTP 使用同一访问密码登录，用户名任意。端口与开关修改后需重新启动服务生效。",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
 
         SectionCard("加密保险箱") {
