@@ -90,7 +90,7 @@ class FileServer(
     private fun handleLogin(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
         session.parseBody(HashMap())
         val password = (session.parms ?: emptyMap())["password"]?.toCharArray() ?: charArrayOf()
-        val remoteIp = session.remoteIp ?: "unknown"
+        val remoteIp = session.remoteIpAddress ?: "unknown"
 
         if (!loginGuard.allowed(remoteIp)) {
             return renderLogin(true, "尝试次数过多，请稍后再试")
