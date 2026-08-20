@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.filebridge.app.data.ThemeMode
 import com.filebridge.app.ui.AppViewModel
 import com.filebridge.app.ui.components.InfoRow
 import com.filebridge.app.ui.components.SectionCard
@@ -219,6 +220,25 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     )
                 }
                 Switch(checked = config.encryptionEnabled, onCheckedChange = { viewModel.setEncryption(it) })
+            }
+        }
+
+        SectionCard("外观") {
+            listOf(
+                ThemeMode.SYSTEM to "跟随系统",
+                ThemeMode.LIGHT to "浅色",
+                ThemeMode.DARK to "深色",
+            ).forEach { (mode, label) ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(selected = config.themeMode == mode) { viewModel.setThemeMode(mode) }
+                        .padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(selected = config.themeMode == mode, onClick = { viewModel.setThemeMode(mode) })
+                    Text(label, modifier = Modifier.padding(start = 8.dp))
+                }
             }
         }
     }

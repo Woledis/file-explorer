@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.map
 
 private val Context._store by preferencesDataStore(name = "settings")
 
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 data class AppConfig(
     val port: Int = 8443,
     val tlsEnabled: Boolean = false,
@@ -20,6 +22,7 @@ data class AppConfig(
     val ftpEnabled: Boolean = false,
     val ftpPort: Int = 2121,
     val ftpAllFiles: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val sharedUris: List<String> = emptyList(),
 ) {
     val scheme: String get() = if (tlsEnabled) "https" else "http"
@@ -35,6 +38,7 @@ class SettingsStore(private val context: Context) {
         val FTP_ENABLED = booleanPreferencesKey("ftp_enabled")
         val FTP_PORT = intPreferencesKey("ftp_port")
         val FTP_ALL_FILES = booleanPreferencesKey("ftp_all_files")
+        val THEME_MODE = intPreferencesKey("theme_mode")
         val SHARED = stringSetPreferencesKey("shared_uris")
     }
 
@@ -47,6 +51,7 @@ class SettingsStore(private val context: Context) {
             ftpEnabled = p[Keys.FTP_ENABLED] ?: false,
             ftpPort = p[Keys.FTP_PORT] ?: 2121,
             ftpAllFiles = p[Keys.FTP_ALL_FILES] ?: false,
+            themeMode = ThemeMode.entries.getOrNull(p[Keys.THEME_MODE] ?: 0) ?: ThemeMode.SYSTEM,
             // DataStore 的 stringSetPreferencesKey 读出来的 Set 顺序不保证,
             // 排序后再 toList,UI 列表项不会每次启动都抖动。
             sharedUris = (p[Keys.SHARED] ?: emptySet()).toSortedSet().toList(),
@@ -64,6 +69,7 @@ class SettingsStore(private val context: Context) {
             p[Keys.FTP_ENABLED] = next.ftpEnabled
             p[Keys.FTP_PORT] = next.ftpPort
             p[Keys.FTP_ALL_FILES] = next.ftpAllFiles
+            p[Keys.THEME_MODE] = next.themeMode.ordinal
             p[Keys.SHARED] = next.sharedUris.toSet()
         }
     }
@@ -75,6 +81,7 @@ class SettingsStore(private val context: Context) {
     suspend fun setFtpEnabled(enabled: Boolean) = update { it.copy(ftpEnabled = enabled) }
     suspend fun setFtpPort(port: Int) = update { it.copy(ftpPort = port) }
     suspend fun setFtpAllFiles(enabled: Boolean) = update { it.copy(ftpAllFiles = enabled) }
+    suspend fun setThemeMode(mode: ThemeMode) = update { it.copy(themeMode = mode) }
     suspend fun addShare(uri: String) = update { it.copy(sharedUris = (it.sharedUris + uri).distinct()) }
     suspend fun removeShare(uri: String) = update { it.copy(sharedUris = it.sharedUris - uri) }
 }

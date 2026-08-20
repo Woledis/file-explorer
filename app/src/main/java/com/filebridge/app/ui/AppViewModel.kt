@@ -11,6 +11,7 @@ import com.filebridge.app.FileBridgeApp
 import com.filebridge.app.data.AppConfig
 import com.filebridge.app.data.SecurityManager
 import com.filebridge.app.data.SettingsStore
+import com.filebridge.app.data.ThemeMode
 import com.filebridge.app.server.ServerController
 import com.filebridge.app.server.ServerService
 import kotlinx.coroutines.Dispatchers
@@ -107,6 +108,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setFtpEnabled(enabled: Boolean) = viewModelScope.launch { store.setFtpEnabled(enabled) }
     fun setFtpPort(port: Int) = viewModelScope.launch { store.setFtpPort(port) }
     fun setFtpAllFiles(enabled: Boolean) = viewModelScope.launch { store.setFtpAllFiles(enabled) }
+    fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { store.setThemeMode(mode) }
 
     // ---- shares ----
 

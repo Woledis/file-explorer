@@ -1,5 +1,6 @@
 package com.filebridge.app.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -16,17 +17,20 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.filebridge.app.data.ThemeMode
 import com.filebridge.app.ui.screens.ConnectionsScreen
 import com.filebridge.app.ui.screens.HomeScreen
 import com.filebridge.app.ui.screens.SettingsScreen
 import com.filebridge.app.ui.screens.ShareScreen
 import com.filebridge.app.ui.screens.VaultScreen
+import com.filebridge.app.ui.theme.FileBridgeTheme
 import kotlinx.coroutines.launch
 
 private enum class Destination(
@@ -42,6 +46,17 @@ private enum class Destination(
 
 @Composable
 fun App(viewModel: AppViewModel = viewModel()) {
+    val config by viewModel.config.collectAsState()
+    val darkTheme = when (config.themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    FileBridgeTheme(darkTheme = darkTheme) { AppContent(viewModel) }
+}
+
+@Composable
+private fun AppContent(viewModel: AppViewModel) {
     val pagerState = rememberPagerState(initialPage = 0) { Destination.entries.size }
     val currentPage by derivedStateOf { pagerState.currentPage }
     val scope = rememberCoroutineScope()
