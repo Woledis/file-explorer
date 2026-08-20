@@ -338,7 +338,7 @@ class FileServer(
         val sb = StringBuilder()
         s.toByteArray(Charsets.UTF_8).forEach { b ->
             val c = b.toInt() and 0xff
-            if ((c in 'a'.code..'z'.code) || (c in 'A'.code..'Z'.code) || (c in '0'.code..'9'.code) || c == '-' || c == '_' || c == '.') {
+            if ((c in 'a'.code..'z'.code) || (c in 'A'.code..'Z'.code) || (c in '0'.code..'9'.code) || c == '-'.code || c == '_'.code || c == '.'.code) {
                 sb.append(c.toChar())
             } else {
                 sb.append('%').append(lowerHex(c))
