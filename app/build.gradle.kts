@@ -42,6 +42,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    packaging {
+        resources {
+            // Bouncy Castle 的三个 jar 都带有相同的 OSGi 清单,资源合并时去重
+            excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+        }
+    }
 }
 
 dependencies {
