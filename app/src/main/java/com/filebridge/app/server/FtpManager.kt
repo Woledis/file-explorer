@@ -1,6 +1,7 @@
 package com.filebridge.app.server
 
 import android.content.Context
+import android.os.Environment
 import com.filebridge.app.FileBridgeApp
 import org.apache.ftpserver.FtpServer
 import org.apache.ftpserver.FtpServerFactory
@@ -8,11 +9,13 @@ import org.apache.ftpserver.listener.ListenerFactory
 
 /**
  * Owns the Apache MINA FTP server. Login is validated against the app's access
- * password; the document tree is the [FtpVfs] virtual view over shared folders.
+ * password. In [allFiles] mode the document tree is the phone's real storage
+ * ([LocalFs]); otherwise it is the [FtpVfs] virtual view over shared folders.
  */
 class FtpManager(
     private val context: Context,
     private val roots: List<SharedRoot>,
+    private val allFiles: Boolean,
 ) {
     private val app: FileBridgeApp get() = FileBridgeApp.from(context)
 
@@ -24,7 +27,11 @@ class FtpManager(
         val vfs = FtpVfs(context, app.docStore, roots)
         val factory = FtpServerFactory().apply {
             userManager = AppUserManager(app.security)
-            fileSystem = AppFileSystem(VfsView(vfs))
+            fileSystem = if (allFiles) {
+                LocalFsFactory(Environment.getExternalStorageDirectory())
+            } else {
+                AppFileSystem(VfsView(vfs))
+            }
         }
         val listener = ListenerFactory().apply { this.port = port }.createListener()
         factory.addListener("default", listener)

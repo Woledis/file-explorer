@@ -106,6 +106,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setEncryption(enabled: Boolean) = viewModelScope.launch { store.setEncryption(enabled) }
     fun setFtpEnabled(enabled: Boolean) = viewModelScope.launch { store.setFtpEnabled(enabled) }
     fun setFtpPort(port: Int) = viewModelScope.launch { store.setFtpPort(port) }
+    fun setFtpAllFiles(enabled: Boolean) = viewModelScope.launch { store.setFtpAllFiles(enabled) }
 
     // ---- shares ----
 

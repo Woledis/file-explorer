@@ -1,5 +1,13 @@
 package com.filebridge.app.ui.screens
 
+import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -48,6 +57,29 @@ fun SettingsScreen(viewModel: AppViewModel) {
     var portText by remember(config.port) { mutableStateOf(config.port.toString()) }
     var ftpPortText by remember(config.ftpPort) { mutableStateOf(config.ftpPort.toString()) }
     val timeouts = listOf(10, 30, 60, 120)
+    val context = LocalContext.current
+
+    // Android 11 以下用运行时存储权限;11 及以上走「所有文件访问」系统设置页。
+    val storagePermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { result -> if (result.values.all { it }) viewModel.setFtpAllFiles(true) }
+
+    fun onFtpAllFilesToggle(enable: Boolean) {
+        if (!enable) {
+            viewModel.setFtpAllFiles(false)
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                viewModel.setFtpAllFiles(true)
+            } else {
+                context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_SETTINGS))
+                viewModel.setFtpAllFiles(true)
+            }
+        } else {
+            storagePermLauncher.launch(
+                arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            )
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp),
@@ -137,6 +169,22 @@ fun SettingsScreen(viewModel: AppViewModel) {
                     )
                 }
                 Switch(checked = config.ftpEnabled, onCheckedChange = { viewModel.setFtpEnabled(it) })
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("FTP 访问全部文件", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "开启后 FTP 根目录为手机全部存储,不再局限于已共享文件夹(需授予存储权限)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = config.ftpAllFiles,
+                    onCheckedChange = { onFtpAllFilesToggle(it) },
+                    enabled = config.ftpEnabled,
+                )
             }
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(

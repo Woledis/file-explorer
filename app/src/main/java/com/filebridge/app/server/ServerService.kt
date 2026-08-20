@@ -1,5 +1,6 @@
 package com.filebridge.app.server
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,9 +8,11 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.IBinder
 import android.provider.DocumentsContract
 import androidx.core.app.NotificationCompat
@@ -113,17 +116,26 @@ class ServerService : Service() {
 
         // FTP server follows its own user-facing toggle; web and FTP are independent.
         if (cfg.ftpEnabled) {
-            val fm = FtpManager(this, roots)
-            if (fm.start(cfg.ftpPort)) {
-                ftpManager = fm
-                ServerController.update { it.copy(ftpRunning = true, ftpPort = cfg.ftpPort) }
-            } else {
+            if (cfg.ftpAllFiles && !allFilesGranted(this)) {
                 ServerController.update { it.copy(ftpRunning = false, ftpPort = 0) }
+            } else {
+                val fm = FtpManager(this, roots, cfg.ftpAllFiles)
+                if (fm.start(cfg.ftpPort)) {
+                    ftpManager = fm
+                    ServerController.update { it.copy(ftpRunning = true, ftpPort = cfg.ftpPort) }
+                } else {
+                    ServerController.update { it.copy(ftpRunning = false, ftpPort = 0) }
+                }
             }
         } else {
             ServerController.update { it.copy(ftpRunning = false, ftpPort = 0) }
         }
     }
+
+    /** All-files access: Android 11+ via MANAGE_EXTERNAL_STORAGE, older via READ. */
+    private fun allFilesGranted(context: Context): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
+        else context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
     private fun uriToRoot(uri: String, docStore: DocStore): SharedRoot? {
         return runCatching {
