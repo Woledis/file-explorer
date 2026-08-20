@@ -20,9 +20,26 @@ import java.io.OutputStream
 class LocalFs(private val root: File) : FileSystemView {
     private var cwd: File = root
 
-    override fun getHomeDirectory(): FtpFile = LocalFtpFile(root)
+    // 目录列表极短期缓存(300ms):Windows 文件管理器会对同一目录反复 LIST,
+    // 避免每次重扫手机存储(FUSE)造成感知延迟。仅缓存目录项的 File 引用,元数据仍惰性读取。
+    private val cacheTtlMs = 300L
+    @Volatile private var cacheDir: String? = null
+    @Volatile private var cacheAt: Long = 0L
+    @Volatile private var cacheFiles: Array<File>? = null
 
-    override fun getWorkingDirectory(): FtpFile = LocalFtpFile(cwd)
+    private fun listCached(dir: File): Array<File>? {
+        val now = System.currentTimeMillis()
+        val key = dir.canonicalPath
+        val cached = cacheFiles
+        if (cacheDir == key && cached != null && now - cacheAt < cacheTtlMs) return cached
+        val list = dir.listFiles()
+        if (list != null) { cacheDir = key; cacheAt = now; cacheFiles = list }
+        return list
+    }
+
+    override fun getHomeDirectory(): FtpFile = LocalFtpFile(root, this)
+
+    override fun getWorkingDirectory(): FtpFile = LocalFtpFile(cwd, this)
 
     override fun changeWorkingDirectory(dir: String): Boolean {
         val target = resolve(dir)
@@ -32,7 +49,7 @@ class LocalFs(private val root: File) : FileSystemView {
         } else false
     }
 
-    override fun getFile(file: String): FtpFile = LocalFtpFile(resolve(file))
+    override fun getFile(file: String): FtpFile = LocalFtpFile(resolve(file), this)
 
     override fun isRandomAccessible(): Boolean = false
 
@@ -49,7 +66,10 @@ class LocalFsFactory(private val root: File) : FileSystemFactory {
     override fun createFileSystemView(user: User): FileSystemView = LocalFs(root)
 }
 
-private class LocalFtpFile(private val file: File) : FtpFile {
+private class LocalFtpFile(
+    private val file: File,
+    private val fs: LocalFs,
+) : FtpFile {
     override fun getAbsolutePath(): String = file.absolutePath
     override fun getName(): String = if (file == file.parentFile) "/" else file.name
     override fun isHidden(): Boolean = file.isHidden
@@ -75,7 +95,7 @@ private class LocalFtpFile(private val file: File) : FtpFile {
         (destination as? LocalFtpFile)?.let { file.renameTo(it.file) } ?: false
 
     override fun listFiles(): List<FtpFile> =
-        file.listFiles().orEmpty().sortedBy { it.isFile }.map { LocalFtpFile(it) }
+        fs.listCached(file).orEmpty().map { LocalFtpFile(it, fs) }
 
     override fun createOutputStream(offset: Long): OutputStream {
         if (offset != 0L) throw IOException("random offset unsupported")

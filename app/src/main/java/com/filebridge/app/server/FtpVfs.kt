@@ -148,7 +148,11 @@ class FtpVfs(
 /** One node of the virtual tree exposed to MINA's FTP engine. */
 private class VfsFile(private val vfs: FtpVfs, private val node: FtpVfs.Node) : FtpFile {
 
-    private fun meta(): FtpVfs.Node = vfs.resolve(node.path)
+    // 原 meta() 对每次属性访问都重新 resolve(),深层路径会反复走 SAF 查询。
+    // 改为单次惰性求值并复用:同一 node 的属性只解析一次。
+    private val self: FtpVfs.Node by lazy(LazyThreadSafetyMode.NONE) { vfs.resolve(node.path) }
+
+    private fun meta(): FtpVfs.Node = self
 
     override fun getAbsolutePath(): String = node.path
     override fun getName(): String = node.name
