@@ -30,6 +30,9 @@ import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.launch
 
+// NanoHTTPD 默认 SOCKET_READ_TIMEOUT 仅 5s;大文件传输必须用更长读超时,否则慢速连接会被掐断。
+private const val NET_SOCKET_READ_TIMEOUT_MS = 600_000
+
 /**
  * Foreground service that owns the NanoHTTPD accept loop so file sharing
  * survives the app going to background.
@@ -80,7 +83,9 @@ class ServerService : Service() {
             docStore = app.docStore,
             sessionStore = sesStore,
         )
-        val started = runCatching { srv.start(NanoHTTPSocketReadTimeout, false) }.isSuccess
+        // NanoHTTPD 默认 5s 读超时:连接闲置 5 秒即断开,大文件/慢网下载会被打断。
+        // 提升到 10 分钟,大文件传输不再因读超时中断(连接闲置由会话超时另管)。
+        val started = runCatching { srv.start(NET_SOCKET_READ_TIMEOUT_MS, false) }.isSuccess
         // 启动期间若收到 Stop(startJob 已被 cancel),立即收尾,避免「socket 已 listen
         // 但通知已移除、UI 显示已停止」的不一致状态。
         if (!coroutineContext.isActive) {

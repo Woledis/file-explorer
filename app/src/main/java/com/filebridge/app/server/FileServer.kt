@@ -154,7 +154,7 @@ class FileServer(
         val target = docStore.openWrite(Uri.parse(tree), docId, name) ?: return text(NanoHTTPD.Response.Status.BAD_REQUEST, "cannot write")
 
         target.output.use { out ->
-            session.inputStream.use { it.copyTo(out, 256 * 1024) }
+            session.inputStream.use { it.copyTo(out, 1024 * 1024) } // 1MB buffer 大文件吞吐更好
         }
         return text(NanoHTTPD.Response.Status.OK, "ok")
     }
