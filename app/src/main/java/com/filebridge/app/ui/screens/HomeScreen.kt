@@ -65,9 +65,13 @@ fun HomeScreen(viewModel: AppViewModel) {
 
         if (state.running) {
             SectionCard("访问信息") {
-                InfoRow("访问地址", state.url, Modifier)
+                if (state.running && state.url.isNotBlank()) {
+                    InfoRow("访问地址", state.url, Modifier)
+                }
                 InfoRow("传输", if (state.tls) "HTTPS（已加密）" else "HTTP", Modifier)
-                if (state.ftpRunning) InfoRow("FTP 地址", state.ftpUrl, Modifier)
+                if (state.ftpRunning && config.ftpEnabled && state.ftpUrl.isNotBlank()) {
+                    InfoRow("FTP 地址", state.ftpUrl, Modifier)
+                }
                 QrBlock(state)
             }
             SectionCard("已共享") {
@@ -125,7 +129,7 @@ private fun StatusCard(
             )
         } else {
             Text(
-                "尚未生成访问地址",
+                "服务未启动",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 12.dp),
