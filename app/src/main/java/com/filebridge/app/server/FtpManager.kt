@@ -26,7 +26,7 @@ class FtpManager(
         val vfs = FtpVfs(context, app.docStore, roots)
         val factory = FtpServerFactory().apply {
             userManager = AppUserManager(app.security)
-            filesystemFactory = AppFileSystem(VfsView(vfs))
+            fileSystem = AppFileSystem(VfsView(vfs))
         }
         val listener = ListenerFactory().apply { this.port = port }.createListener()
         factory.addListener("default", listener)
