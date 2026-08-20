@@ -6,6 +6,7 @@ import com.filebridge.app.data.DocStore
 import com.filebridge.app.data.SecurityManager
 import java.security.Security
 import java.util.Base64
+import java.io.InputStream
 import fi.iki.elonen.NanoHTTPD
 import java.util.concurrent.ConcurrentHashMap
 
@@ -142,7 +143,7 @@ class FileServer(
         if (sharedRoots.none { it.treeUri == tree }) return forbidden()
         val docId = decode(session.parms?.get("doc")) ?: return notFound()
         val opened = docStore.openDocument(Uri.parse(tree), docId) ?: return notFound()
-        return streamResponse(opened)
+        return streamResponse(opened, session.headers?.get("range"))
     }
 
     private fun handleUpload(session: NanoHTTPD.IHTTPSession): NanoHTTPD.Response {
@@ -313,14 +314,80 @@ class FileServer(
 
     // ------------------------------------------------------------------ helpers
 
-    private fun streamResponse(opened: DocStore.OpenedDoc): NanoHTTPD.Response {
+    private fun streamResponse(opened: DocStore.OpenedDoc, rangeHeader: String?): NanoHTTPD.Response {
+        val total = opened.size
+        if (rangeHeader != null && total >= 0) {
+            when (val r = parseRange(rangeHeader, total)) {
+                is RangeResult.Range -> {
+                    val length = r.end - r.start + 1
+                    skipFully(opened.stream, r.start)
+                    val resp = NanoHTTPD.newFixedLengthResponse(
+                        NanoHTTPD.Response.Status.PARTIAL_CONTENT, mime(opened.name), opened.stream, length
+                    )
+                    resp.addHeader("Content-Range", "bytes ${r.start}-${r.end}/$total")
+                    resp.addHeader("Content-Disposition", "attachment; filename*=UTF-8''${percentEncode(opened.name)}")
+                    return resp
+                }
+                is RangeResult.Unsatisfiable -> {
+                    return NanoHTTPD.newFixedLengthResponse(
+                        NanoHTTPD.Response.Status.RANGE_NOT_SATISFIABLE, MIME_PLAINTEXT, ""
+                    ).also { it.addHeader("Content-Range", "bytes */$total") }
+                }
+                RangeResult.Ignore -> { /* 多段/格式非法:忽略 Range,回退到完整响应 */ }
+            }
+        }
         val resp = if (opened.size >= 0) {
-            newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime(opened.name), opened.stream, opened.size)
+            NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, mime(opened.name), opened.stream, opened.size)
         } else {
-            newChunkedResponse(NanoHTTPD.Response.Status.OK, mime(opened.name), opened.stream)
+            NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, mime(opened.name), opened.stream)
         }
         resp.addHeader("Content-Disposition", "attachment; filename*=UTF-8''${percentEncode(opened.name)}")
+        resp.addHeader("Accept-Ranges", "bytes")
         return resp
+    }
+
+    /** 拦截的请求类型,用于解析单段 Range。多段 Range 不做分片返回,直接回退完整响应。 */
+    private sealed class RangeResult {
+        object Ignore : RangeResult()
+        object Unsatisfiable : RangeResult()
+        data class Range(val start: Long, val end: Long) : RangeResult()
+    }
+
+    private fun parseRange(header: String, total: Long): RangeResult {
+        val spec = header.removePrefix("bytes=").trim()
+        if (spec.isEmpty() || spec.contains(',')) return RangeResult.Ignore
+
+        return if (spec.startsWith("-")) {
+            // 后缀式:bytes=-N 表示"最后 N 个字节"
+            val n = spec.drop(1).toLongOrNull() ?: return RangeResult.Ignore
+            if (n <= 0) return RangeResult.Ignore
+            val len = minOf(n, total)
+            val start = total - len
+            if (start < 0) return RangeResult.Unsatisfiable
+            RangeResult.Range(start, total - 1)
+        } else {
+            val dash = spec.indexOf('-')
+            if (dash < 0) return RangeResult.Ignore
+            val start = spec.substring(0, dash).toLongOrNull() ?: return RangeResult.Ignore
+            if (start < 0 || start >= total) return RangeResult.Unsatisfiable
+            val endStr = spec.substring(dash + 1)
+            val end = if (endStr.isEmpty()) total - 1 else (endStr.toLongOrNull() ?: return RangeResult.Ignore)
+            val e = minOf(end, total - 1)
+            if (e < start) return RangeResult.Unsatisfiable
+            RangeResult.Range(start, e)
+        }
+    }
+
+    private fun skipFully(stream: InputStream, n: Long) {
+        var remaining = n
+        val buf = ByteArray(8192)
+        while (remaining > 0) {
+            val skipped = stream.skip(remaining)
+            if (skipped > 0) { remaining -= skipped; continue }
+            val read = stream.read(buf, 0, minOf(buf.size.toLong(), remaining).toInt())
+            if (read < 0) break
+            remaining -= read
+        }
     }
 
     private fun rootDocId(treeUri: String): String =
