@@ -4,18 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-// Release signing: prefer a keystore.properties file, then CI env vars,
-// finally fall back to whatever file already sits in the repo root.
-val signStoreFile = System.getenv("KEYSTORE_PATH")
-    ?: rootProject.file("keystore.properties").takeIf { it.exists() }
-        ?.let { f ->
-            val p = java.util.Properties().apply { f.inputStream().use { load(it) } }
-            file(p.getProperty("storeFile"))
-        }
-    ?: file("release.keystore")
-val signStorePass = System.getenv("KEYSTORE_PASSWORD") ?: "filebridge2026"
-val signKeyAlias = System.getenv("KEY_ALIAS") ?: "filebridge"
-val signKeyPass = System.getenv("KEY_PASSWORD") ?: "filebridge2026"
+// Release 直接复用 debug 签名，无需证书即可编译、安装；需要正式签名时再替换为 keystore。
 
 android {
     namespace = "com.filebridge.app"
@@ -29,20 +18,10 @@ android {
         versionName = "0.1.0"
     }
 
-    signingConfigs {
-        create("release") {
-            storeFile = signStoreFile
-            storePassword = signStorePass
-            keyAlias = signKeyAlias
-            keyPassword = signKeyPass
-        }
-    }
-
     buildTypes {
         release {
             isMinifyEnabled = false
-            signingConfig = if (signStoreFile.exists()) signingConfigs.getByName("release")
-            else signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
