@@ -5,8 +5,6 @@ import android.content.Context
 import com.filebridge.app.data.DocStore
 import com.filebridge.app.data.SecurityManager
 import com.filebridge.app.data.SettingsStore
-import org.conscrypt.Conscrypt
-import java.security.Security
 
 class FileBridgeApp : Application() {
 
@@ -19,20 +17,11 @@ class FileBridgeApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        installCryptoProvider()
+        // Conscrypt 不再在这里无条件注册:它只在启用 HTTPS(TLS) 时才有用,
+        // 由 FileServer 在真正需要时惰性安装,避免冷启动加载/注册额外 provider。
         settingsStore = SettingsStore(this)
         security = SecurityManager(this)
         docStore = DocStore(this)
-    }
-
-    private fun installCryptoProvider() {
-        try {
-            if (Conscrypt.isAvailable()) {
-                Security.insertProviderAt(Conscrypt.newProvider(), 1)
-            }
-        } catch (_: Throwable) {
-            // fall back to platform providers
-        }
     }
 
     companion object {

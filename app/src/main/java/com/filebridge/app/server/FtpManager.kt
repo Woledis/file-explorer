@@ -19,8 +19,6 @@ class FtpManager(
     @Volatile
     private var server: FtpServer? = null
 
-    val isRunning: Boolean get() = server != null
-
     fun start(port: Int): Boolean {
         stop()
         val vfs = FtpVfs(context, app.docStore, roots)

@@ -22,7 +22,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlin.coroutines.coroutineContext
@@ -99,15 +98,12 @@ class ServerService : Service() {
                 )
             }
             pollJob = scope.launch {
-                var last = -1
-                while (isActive) {
-                    delay(3000)
-                    // Only publish when the value actually changes, so an idle
-                    // server stops waking the UI every 3s for recomposition.
+                // 事件驱动:仅在会话数真正变化时更新一次 UI,
+                // 空闲服务器不再每 3s 定时唤醒(省电)。
+                sesStore.version.collect {
                     val n = sesStore.activeCount
-                    if (n != last) {
-                        last = n
-                        ServerController.update { it.copy(connections = n) }
+                    ServerController.update { cur ->
+                        if (cur.connections == n) cur else cur.copy(connections = n)
                     }
                 }
             }

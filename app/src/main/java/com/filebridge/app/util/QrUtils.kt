@@ -8,8 +8,6 @@ import com.google.zxing.qrcode.QRCodeWriter
 
 object QrUtils {
 
-    fun content(scheme: String, host: String, port: Int): String = "$scheme://$host:$port"
-
     /** Render [content] to a square QR [Bitmap]. */
     fun toBitmap(content: String, size: Int = 480): Bitmap {
         val hints: Map<EncodeHintType, Any> = mapOf(

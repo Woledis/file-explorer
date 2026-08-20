@@ -4,6 +4,7 @@ import android.net.Uri
 import com.filebridge.app.crypto.TlsUtil
 import com.filebridge.app.data.DocStore
 import com.filebridge.app.data.SecurityManager
+import java.security.Security
 import java.util.Base64
 import fi.iki.elonen.NanoHTTPD
 import java.util.concurrent.ConcurrentHashMap
@@ -33,7 +34,19 @@ class FileServer(
 
     init {
         if (tls) {
+            ensureConscrypt()
             makeSecure(TlsUtil.createServerSocketFactory(), arrayOf("TLSv1.2", "TLSv1.3"))
+        }
+    }
+
+    /** TLS 需要时才把 Conscrypt 注册为默认 provider;HTTP/FTP 模式不会加载它。 */
+    private fun ensureConscrypt() {
+        try {
+            if (org.conscrypt.Conscrypt.isAvailable()) {
+                Security.insertProviderAt(org.conscrypt.Conscrypt.newProvider(), 1)
+            }
+        } catch (_: Throwable) {
+            // fall back to platform providers
         }
     }
 
