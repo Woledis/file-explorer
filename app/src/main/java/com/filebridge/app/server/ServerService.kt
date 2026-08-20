@@ -137,10 +137,11 @@ class ServerService : Service() {
         }
     }
 
-    /** All-files access: Android 11+ via MANAGE_EXTERNAL_STORAGE, older via READ. */
+    /** All-files access: Android 11+ via MANAGE_EXTERNAL_STORAGE, older via READ+WRITE. */
     private fun allFilesGranted(context: Context): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) Environment.isExternalStorageManager()
-        else context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+        else context.checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+            context.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
     private fun uriToRoot(uri: String, docStore: DocStore): SharedRoot? {
         return runCatching {
