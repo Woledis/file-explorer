@@ -50,8 +50,12 @@ android {
 
     packaging {
         resources {
-            // Bouncy Castle 的三个 jar 都带有相同的 OSGi 清单,资源合并时去重
+            // 第三方 jar(MINA/FtpServer/BouncyCastle 等)各自携带相同的 META-INF 资源，
+            // 合并时去重,避免 mergeDebugJavaResource 报 "3 files found"。
             excludes += "META-INF/versions/9/OSGI-INF/MANIFEST.MF"
+            excludes += "META-INF/DEPENDENCIES"
+            excludes += "META-INF/LICENSE*"
+            excludes += "META-INF/NOTICE*"
         }
     }
 }
