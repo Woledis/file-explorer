@@ -45,6 +45,18 @@ jobs:
             echo "KEY_PASSWORD=filebridge2026" >> "$GITHUB_ENV"
           fi
 
+      - name: Diagnose nanohttpd classpath
+        run: |
+          gradle --no-daemon :app:dependencies --configuration debugCompileClasspath > /tmp/deps.txt 2>&1 || true
+          echo "===== nanohttpd ====="
+          grep -n -i nanohttpd /tmp/deps.txt || echo "(no nanohttpd line)"
+          echo "===== other mavenCentral deps ====="
+          grep -n -iE "zxing|bouncycast|conscrypt" /tmp/deps.txt || echo "(none)"
+          echo "===== failure markers ====="
+          grep -niE "FAILED|Could not|Unable to|error:" /tmp/deps.txt | head -40
+          echo "===== tail ====="
+          tail -30 /tmp/deps.txt
+
       - name: Build debug APK
         run: gradle --no-daemon assembleDebug
 
