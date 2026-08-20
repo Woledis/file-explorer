@@ -1,6 +1,8 @@
 package com.filebridge.app.ui
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Lock
@@ -14,54 +16,43 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
-import androidx.navigation.compose.rememberNavController
 import com.filebridge.app.ui.screens.ConnectionsScreen
 import com.filebridge.app.ui.screens.HomeScreen
 import com.filebridge.app.ui.screens.SettingsScreen
 import com.filebridge.app.ui.screens.ShareScreen
 import com.filebridge.app.ui.screens.VaultScreen
+import kotlinx.coroutines.launch
 
 private enum class Destination(
-    val route: String,
     val label: String,
     val icon: ImageVector,
 ) {
-    Home("home", "主屏", Icons.Filled.Home),
-    Share("share", "共享", Icons.Outlined.Folder),
-    Vault("vault", "保险箱", Icons.Filled.Lock),
-    Connections("connections", "连接", Icons.Outlined.Devices),
-    Settings("settings", "设置", Icons.Filled.Settings),
+    Home("主屏", Icons.Filled.Home),
+    Share("共享", Icons.Outlined.Folder),
+    Vault("保险箱", Icons.Filled.Lock),
+    Connections("连接", Icons.Outlined.Devices),
+    Settings("设置", Icons.Filled.Settings),
 }
 
 @Composable
 fun App(viewModel: AppViewModel = viewModel()) {
-    val navController = rememberNavController()
-    val backStack by navController.currentBackStackEntryAsState()
-    val current = backStack?.destination
+    val pagerState = rememberPagerState(initialPage = 0) { Destination.entries.size }
+    val currentPage by derivedStateOf { pagerState.currentPage }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
         bottomBar = {
             NavigationBar {
-                Destination.entries.forEach { d ->
-                    val selected = current?.hierarchy?.any { it.route == d.route } == true
+                Destination.entries.forEachIndexed { index, d ->
                     NavigationBarItem(
-                        selected = selected,
-                        onClick = {
-                            navController.navigate(d.route) {
-                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
+                        selected = currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
                         icon = { Icon(d.icon, contentDescription = d.label) },
                         label = { Text(d.label, style = MaterialTheme.typography.labelMedium) },
                     )
@@ -69,16 +60,17 @@ fun App(viewModel: AppViewModel = viewModel()) {
             }
         },
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Destination.Home.route,
+        HorizontalPager(
+            state = pagerState,
             modifier = Modifier.padding(padding),
-        ) {
-            composable(Destination.Home.route) { HomeScreen(viewModel) }
-            composable(Destination.Share.route) { ShareScreen(viewModel) }
-            composable(Destination.Vault.route) { VaultScreen(viewModel) }
-            composable(Destination.Connections.route) { ConnectionsScreen(viewModel) }
-            composable(Destination.Settings.route) { SettingsScreen(viewModel) }
+        ) { page ->
+            when (Destination.entries[page]) {
+                Destination.Home -> HomeScreen(viewModel)
+                Destination.Share -> ShareScreen(viewModel)
+                Destination.Vault -> VaultScreen(viewModel)
+                Destination.Connections -> ConnectionsScreen(viewModel)
+                Destination.Settings -> SettingsScreen(viewModel)
+            }
         }
     }
 }
