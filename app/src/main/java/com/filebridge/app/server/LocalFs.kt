@@ -57,7 +57,10 @@ private class LocalFtpFile(private val file: File) : FtpFile {
     override fun isFile(): Boolean = file.isFile
     override fun doesExist(): Boolean = file.exists()
     override fun isReadable(): Boolean = file.canRead()
-    override fun isWritable(): Boolean = file.canWrite()
+    override fun isWritable(): Boolean =
+        // 上传目标通常是尚不存在的文件:File.canWrite() 对不存在文件恒为 false,
+        // 会导致 MINA 误判"不可写"而拒绝上传(550)。此时应看父目录是否可写。
+        if (file.exists()) file.canWrite() else (file.parentFile?.canWrite() ?: false)
     override fun isRemovable(): Boolean = true
     override fun getOwnerName(): String = "filebridge"
     override fun getGroupName(): String = "filebridge"
