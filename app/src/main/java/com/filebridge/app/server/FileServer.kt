@@ -312,16 +312,23 @@ class FileServer(
     private fun rootDocId(treeUri: String): String =
         android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(treeUri))
 
-    private fun redirect(location: String): Response =
-        newFixedLengthResponse(Response.Status.REDIRECT, "text/plain", "").also {
+    private fun redirect(location: String): Response {
+        return newFixedLengthResponse(Response.Status.REDIRECT, "text/plain", "").also {
             it.addHeader("Location", location)
         }
+    }
 
-    private fun text(status: Response.Status, s: String): Response =
-        newFixedLengthResponse(status, MIME_PLAINTEXT, s)
+    private fun text(status: Response.Status, s: String): Response {
+        return newFixedLengthResponse(status, MIME_PLAINTEXT, s)
+    }
 
-    private fun notFound(): Response = text(Response.Status.NOT_FOUND, "not found")
-    private fun forbidden(): Response = text(Response.Status.FORBIDDEN, "forbidden")
+    private fun notFound(): Response {
+        return text(Response.Status.NOT_FOUND, "not found")
+    }
+
+    private fun forbidden(): Response {
+        return text(Response.Status.FORBIDDEN, "forbidden")
+    }
 
     private fun enc(s: String): String =
         Base64.getUrlEncoder().withoutPadding().encodeToString(s.toByteArray(Charsets.UTF_8))
