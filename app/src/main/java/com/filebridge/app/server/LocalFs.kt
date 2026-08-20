@@ -20,21 +20,25 @@ import java.io.OutputStream
 class LocalFs(private val root: File) : FileSystemView {
     private var cwd: File = root
 
-    // 目录列表极短期缓存(300ms):Windows 文件管理器会对同一目录反复 LIST,
-    // 避免每次重扫手机存储(FUSE)造成感知延迟。仅缓存目录项的 File 引用,元数据仍惰性读取。
-    private val cacheTtlMs = 300L
+    // 目录列表短期缓存(1s):Windows 文件管理器会对同一目录反复 LIST,
+    // 缓存避免每次重扫手机存储(FUSE)。列表在填充时一次性"目录在前+名称序"排序,
+    // 后续 LIST 直接复用,不再对每项重复 stat。单用户本地使用,T秒内目录变化可忽略。
+    private val cacheTtlMs = 1000L
     @Volatile private var cacheDir: String? = null
     @Volatile private var cacheAt: Long = 0L
-    @Volatile private var cacheFiles: Array<File>? = null
+    @Volatile private var cacheEntries: List<FtpFile>? = null
 
-    internal fun listCached(dir: File): Array<File>? {
+    internal fun listCached(dir: File): List<FtpFile>? {
         val now = System.currentTimeMillis()
         val key = dir.canonicalPath
-        val cached = cacheFiles
+        val cached = cacheEntries
         if (cacheDir == key && cached != null && now - cacheAt < cacheTtlMs) return cached
-        val list = dir.listFiles()
-        if (list != null) { cacheDir = key; cacheAt = now; cacheFiles = list }
-        return list
+        val files = dir.listFiles() ?: return cached
+        val entries = files
+            .map { LocalFtpFile(it, this) as FtpFile }
+            .sortedWith(compareBy({ !it.isDirectory() }, { it.name.lowercase() }))
+        cacheDir = key; cacheAt = now; cacheEntries = entries
+        return entries
     }
 
     override fun getHomeDirectory(): FtpFile = LocalFtpFile(root, this)
@@ -95,7 +99,7 @@ private class LocalFtpFile(
         (destination as? LocalFtpFile)?.let { file.renameTo(it.file) } ?: false
 
     override fun listFiles(): List<FtpFile> =
-        fs.listCached(file).orEmpty().map { LocalFtpFile(it, fs) }
+        fs.listCached(file).orEmpty()
 
     override fun createOutputStream(offset: Long): OutputStream {
         if (offset != 0L) throw IOException("random offset unsupported")
