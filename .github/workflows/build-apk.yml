@@ -66,12 +66,8 @@ jobs:
           echo "===== tail ====="
           tail -30 /tmp/deps.txt
 
-      - name: Build debug APK
-        run: gradle --no-daemon assembleDebug
-
-      - name: Build signed release APK
-        if: steps.sign.outputs.signed == 'yes'
-        run: gradle --no-daemon assembleRelease
+      - name: Build debug + release APK
+        run: gradle --no-daemon assembleDebug assembleRelease
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4
