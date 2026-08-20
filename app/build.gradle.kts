@@ -19,7 +19,7 @@ android {
         versionName = "0.1.0"
 
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
@@ -57,6 +57,10 @@ android {
             excludes += "META-INF/LICENSE*"
             excludes += "META-INF/NOTICE*"
         }
+        jniLibs {
+            // 压缩原生库(.so 约可压掉一半),显著减小 APK 体积;真机运行时按需解压。
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -86,7 +90,7 @@ dependencies {
 // ---- 编译 Rust 核心为 .so 并放入 jniLibs ----
 val rustDir = file("$projectDir/src/main/rust")
 val rustJniLibs = file("$projectDir/src/main/jniLibs")
-val androidAbis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+val androidAbis = listOf("arm64-v8a")
 
 fun onPath(tool: String): Boolean {
     val cmdEast = if (System.getProperty("os.name").lowercase().contains("win")) "where" else "which"
