@@ -108,6 +108,11 @@ pub extern "C" fn fb_engine_stop() -> c_int {
     1
 }
 
+#[no_mangle]
+pub extern "C" fn fb_engine_is_running() -> c_int {
+    to_int(RUNNING.load(Ordering::SeqCst))
+}
+
 // ----------------------------------------------------------------- ftp
 
 static FTP_RUNNING: AtomicBool = AtomicBool::new(false);

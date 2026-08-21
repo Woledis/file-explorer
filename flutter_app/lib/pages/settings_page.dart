@@ -16,11 +16,14 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   static const String _root = '/storage/emulated/0';
+  static const String _settingsFile = '/data/data/com.filebridge.app/settings.txt';
   static const int _ftpPort = 2121;
 
   final _password = TextEditingController();
   bool _passwordEnabled = false;
   ThemeMode _theme = ThemeMode.system;
+  bool _httpOn = false;
+  int _httpPort = 0;
   bool _ftpOn = false;
   int _ftpActual = 0;
   String _lanIp = '';
@@ -34,8 +37,31 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _load() {
     _passwordEnabled = rustGetPassword().isNotEmpty;
+    _httpOn = engineRunning();
     _ftpOn = ftpRunning();
     _ftpActual = _ftpPort;
+  }
+
+  void _toggleHttp(bool on) {
+    if (on) {
+      final port = engineStart(_root, _settingsFile, 0);
+      if (port <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('HTTP 服务启动失败, 可能已在主页启动')),
+        );
+        return;
+      }
+      setState(() {
+        _httpOn = true;
+        _httpPort = port;
+      });
+    } else {
+      engineStop();
+      setState(() {
+        _httpOn = false;
+        _httpPort = 0;
+      });
+    }
   }
 
   Future<void> _findIp() async {
@@ -133,6 +159,21 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 4),
+          Card(
+            margin: EdgeInsets.zero,
+            child: SwitchListTile(
+              secondary: const Icon(Icons.http_outlined),
+              title: const Text('HTTP 服务'),
+              subtitle: Text(
+                _httpOn && _httpPort > 0
+                    ? '电脑浏览器访问: http://$_lanIp:$_httpPort'
+                    : '给电脑浏览器提供文件共享',
+              ),
+              value: _httpOn,
+              onChanged: _toggleHttp,
+            ),
+          ),
+          const SizedBox(height: 12),
           Card(
             margin: EdgeInsets.zero,
             child: SwitchListTile(
