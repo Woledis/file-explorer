@@ -31,7 +31,7 @@ pub fn serve(root: &str, port: u16) -> io::Result<()> {
 
 /// 在已绑定的监听器上运行, 便于调用方读取实际端口。STOP 标志在进来时复位。
 pub fn serve_on(listener: TcpListener, root: &str) -> io::Result<()> {
-    STOP.store(false, SeqCst);
+    STOP.store(false, Ordering::SeqCst);
     let root = String::from(root.trim_end_matches('/'));
     let root = std::sync::Arc::new(root);
     let active = std::sync::Arc::new(AtomicUsize::new(0));
@@ -82,7 +82,7 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
     let ctrl_ip = stream
         .local_addr()
         .map(|a| a.ip().to_string())
-        .unwrap_or_else(local_ip);
+        .unwrap_or_else(|_| local_ip());
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return Ok(()),
