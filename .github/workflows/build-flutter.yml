@@ -24,13 +24,14 @@ jobs:
       - name: Install Android SDK 34 + NDK
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
-            "platforms;android-34" "build-tools;34.0.0" "ndk;25.2.9519653" >/dev/null || true
+            "platforms;android-34" "platforms;android-35" "build-tools;34.0.0" "ndk;25.2.9519653" >/dev/null || true
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: '3.24.5'
+          # 3.47.1: flutter_foreground_task 10.x 要求 Flutter>=3.38
+          flutter-version: '3.47.1'
           cache: true
 
       - name: Install Rust toolchain
