@@ -12,37 +12,32 @@ if [ ! -f "$GRADLE" ]; then
 fi
 
 python3 - "$GRADLE" <<'PY'
-import sys
+import sys, re
 p = sys.argv[1]
 s = open(p, encoding='utf-8').read()
+
+# shrinkResources(资源收缩) 会把只在 manifest 声明、未被代码引用的存储权限
+# (MANAGE/READ/WRITE_EXTERNAL_STORAGE)当作"未使用资源"删除, 导致系统授权页找不到它们。
+# 因此停用 shrinkResources, 只保留 minifyEnabled(代码收缩/混淆, 体积影响极小)。
+s = re.sub(r'\n\s*shrinkResources\s*(=\s*)?true', '', s)
+
 if ('minifyEnabled' in s) or ('isMinifyEnabled' in s):
-    print('R8 already enabled'); sys.exit(0)
-
-# Groovy 模板 (Flutter 默认)
-groovy_marker = 'signingConfig = signingConfigs.getByName("debug")'
-# Kotlin DSL 模板 (部分新版本)
-kts_marker = 'signingConfig = signingConfigs.getByName("debug")'
-
-if groovy_marker in s:
-    add = '\n            minifyEnabled true\n            shrinkResources true'
-    s = s.replace(groovy_marker, groovy_marker + add, 1)
     open(p, 'w', encoding='utf-8').write(s)
-    print('R8 enabled (groovy)')
+    print('R8 minify already enabled; shrinkResources disabled')
     sys.exit(0)
 
-# fallback: 在 release block 的右花括号前注入
-import re
-m = re.search(r'buildTypes\s*\{\s*release.*?\n(\s*)\}', s, re.S)
+m = re.search(r'signingConfig = signingConfigs.getByName\("debug"\)', s)
 if m:
-    indent = m.group(1)
-    inj = (f'\n{indent}    minifyEnabled true\n'
-           f'{indent}    shrinkResources true')
-    s = s[:m.end()-1] + inj + s[m.end()-1:]
-    open(p, 'w', encoding='utf-8').write(s)
-    print('R8 enabled (release-block fallback)')
-    sys.exit(0)
-
-print('could not enable R8'); sys.exit(1)
+    s = s.replace(m.group(0), m.group(0) + '\n            minifyEnabled true', 1)
+else:
+    m2 = re.search(r'buildTypes\s*\{\s*release.*?\n(\s*)\}', s, re.S)
+    if m2:
+        indent = m2.group(1)
+        s = s[:m2.end()-1] + f'\n{indent}    minifyEnabled true' + s[m2.end()-1:]
+    else:
+        print('could not enable R8'); sys.exit(1)
+open(p, 'w', encoding='utf-8').write(s)
+print('R8 minifyEnabled enabled (shrinkResources off)')
 PY
 
 # 前台服务插件(flutter_foreground_task / android_lifecycle)要求 compileSdk>=35,
