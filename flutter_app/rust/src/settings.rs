@@ -1,0 +1,94 @@
+//! 设置与口令持久化。纯 std, 存成简单的 key=value 文本文件。
+
+use std::fs;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
+
+static PASSWORD: Mutex<Option<String>> = Mutex::new(None);
+static SETTINGS_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
+static TLS_INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+const KEY_NAME: &str = "access_password";
+
+pub fn set_password(pw: &str) {
+    let mut g = PASSWORD.lock().unwrap();
+    *g = Some(pw.to_owned());
+    persist();
+}
+
+/// empty string means no password (open).
+pub fn get_password() -> String {
+    PASSWORD.lock().unwrap().clone().unwrap_or_default()
+}
+
+pub fn verify(pw: &str) -> bool {
+    let cur = get_password();
+    cur.is_empty() || const_time_eq(&cur, pw)
+}
+
+/// 0-length probabilistic equality to reduce timing leak.
+fn const_time_eq(a: &str, b: &str) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff: u8 = 0;
+    let ab = a.as_bytes();
+    let bb = b.as_bytes();
+    for i in 0..ab.len() {
+        diff |= ab[i] ^ bb[i];
+    }
+    diff == 0
+}
+
+pub fn init(path: &str) {
+    {
+        let mut g = SETTINGS_PATH.lock().unwrap();
+        *g = Some(PathBuf::from(path));
+    }
+    let _ = load();
+}
+
+pub fn persist() {
+    let path = {
+        let g = SETTINGS_PATH.lock().unwrap();
+        g.clone()
+    };
+    let Some(path) = path else { return };
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let pw = get_password();
+    if let Ok(mut f) = fs::File::create(&path) {
+        let _ = write!(f, "{}={}\n", KEY_NAME, pw);
+        let _ = f.sync_all();
+    }
+}
+
+fn load() -> std::io::Result<()> {
+    let path = {
+        let g = SETTINGS_PATH.lock().unwrap();
+        g.clone()
+    };
+    let Some(path) = path else { return Ok(()) };
+    if !Path::new(&path).exists() {
+        return Ok(());
+    }
+    let data = fs::read_to_string(&path)?;
+    for line in data.lines() {
+        if let Some(eq) = line.find('=') {
+            let (k, v) = (&line[..eq], &line[eq + 1..]);
+            if k == KEY_NAME {
+                let mut g = PASSWORD.lock().unwrap();
+                *g = Some(v.to_owned());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// TLS is optional. We keep a flag so future wiring can lazily init once.
+pub fn mark_tls_used() {
+    TLS_INITIALIZED.store(true, Ordering::SeqCst);
+}

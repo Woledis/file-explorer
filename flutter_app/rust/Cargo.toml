@@ -1,6 +1,6 @@
 [package]
 name = "filebridge_core"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 
@@ -9,8 +9,11 @@ name = "filebridge_core"
 crate-type = ["cdylib"]
 
 [dependencies]
+# 口令鉴权与管理
+sha2 = "0.10"
+hmac = "0.12"
+# 无第三方 HTTP, 纯 std 手写, 保持体积小
 
-# 面向体积与性能的发布产物
 [profile.release]
 opt-level = "z"
 lto = true
