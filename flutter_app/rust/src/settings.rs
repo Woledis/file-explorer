@@ -17,8 +17,12 @@ const KEY_HTTP: &str = "http_port";
 const KEY_FTP: &str = "ftp_port";
 
 pub fn set_password(pw: &str) {
-    let mut g = PASSWORD.lock().unwrap();
-    *g = Some(pw.to_owned());
+    // 先在块内释放锁再 persist(): persist 会经 get_password 再次锁
+    // PASSWORD, std Mutex 不可重入, 持锁调用会死锁卡死 UI。
+    {
+        let mut g = PASSWORD.lock().unwrap();
+        *g = Some(pw.to_owned());
+    }
     persist();
 }
 

@@ -86,7 +86,16 @@ fn read_header(r: &mut impl Read) -> std::io::Result<(Vec<u8>, usize)> {
 }
 
 /// 加密 src 文件到 dst。每个块独立随机 nonce, 头部自描述。
+/// 中途失败时删除半成品 dst, 避免留下看似完整的残缺文件。
 pub fn encrypt_file(src: &str, dst: &str, password: &str) -> bool {
+    let ok = encrypt_inner(src, dst, password);
+    if !ok {
+        let _ = std::fs::remove_file(dst);
+    }
+    ok
+}
+
+fn encrypt_inner(src: &str, dst: &str, password: &str) -> bool {
     if password.is_empty() {
         return false;
     }
@@ -134,7 +143,16 @@ pub fn encrypt_file(src: &str, dst: &str, password: &str) -> bool {
 }
 
 /// 解密 src 到 dst。校验魔数与 GCM tag; 口令错误时解密失败并返回 false。
+/// 中途失败时删除半成品 dst。
 pub fn decrypt_file(src: &str, dst: &str, password: &str) -> bool {
+    let ok = decrypt_inner(src, dst, password);
+    if !ok {
+        let _ = std::fs::remove_file(dst);
+    }
+    ok
+}
+
+fn decrypt_inner(src: &str, dst: &str, password: &str) -> bool {
     if password.is_empty() {
         return false;
     }

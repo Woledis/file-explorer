@@ -122,17 +122,26 @@ pub extern "C" fn fb_engine_start(
     RUNNING.store(true, Ordering::SeqCst);
     let root = Arc::new(root);
 
+    // 非阻塞轮询: STOP 只在有新连接时才被检查的旧写法, 会让"停止服务"在无人
+    // 访问时永远不生效(端口持续占用, 重启失败)。轮询让停止在 100ms 内落地。
+    listener.set_nonblocking(true).ok();
     std::thread::spawn(move || {
-        for conn in listener.incoming() {
+        loop {
             if STOP.load(Ordering::SeqCst) {
                 break;
             }
-            match conn {
-                Ok(stream) => {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    stream.set_nonblocking(false).ok();
                     let root = Arc::clone(&root);
                     std::thread::spawn(move || handle_conn(stream, root));
                 }
-                Err(_) => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                Err(_) => {
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
             }
         }
         RUNNING.store(false, Ordering::SeqCst);

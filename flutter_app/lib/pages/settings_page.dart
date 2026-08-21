@@ -49,12 +49,17 @@ class _SettingsPageState extends State<SettingsPage> {
     _ftpActual = _ftpPortCtrl.text.isEmpty ? 2121 : int.tryParse(_ftpPortCtrl.text) ?? 2121;
   }
 
-  void _toggleHttp(bool on) {
+  Future<void> _toggleHttp(bool on) async {
     if (on) {
+      // 已在别处(主页)启动时先重启, 保证端口设置生效且开关状态一致
+      if (engineRunning()) {
+        await engineStopAndWait();
+      }
       final port = engineStart(_root, _settingsFile, 0);
       if (port <= 0) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('HTTP 服务启动失败, 可能已在主页启动')),
+          const SnackBar(content: Text('HTTP 服务启动失败, 可能端口被占用')),
         );
         return;
       }
@@ -64,7 +69,7 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       syncKeepAlive();
     } else {
-      engineStop();
+      await engineStopAndWait();
       setState(() {
         _httpOn = false;
         _httpPort = 0;
@@ -95,12 +100,17 @@ class _SettingsPageState extends State<SettingsPage> {
     if (mounted) setState(() => _lanIp = ip);
   }
 
-  void _toggleFtp(bool on) {
+  Future<void> _toggleFtp(bool on) async {
     if (on) {
+      // 已在别处启动时先重启, 让新端口生效
+      if (ftpRunning()) {
+        await ftpStopAndWait();
+      }
       final def = settingsGetFtpPort();
       final port = (def > 0 && def <= 65535) ? def : 2121;
       final actual = ftpStart(_root, port);
       if (actual <= 0) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('FTP 启动失败, 可能端口被占用')),
         );
@@ -112,7 +122,7 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       syncKeepAlive();
     } else {
-      ftpStop();
+      await ftpStopAndWait();
       setState(() {
         _ftpOn = false;
         _ftpActual = 0;

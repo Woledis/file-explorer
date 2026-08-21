@@ -39,10 +39,17 @@ pub fn handle_conn(mut stream: TcpStream, root: Arc<String>) {
     let mut reader = BufReader::new(read_stream);
     'outer: loop {
         let mut head_lines: Vec<String> = Vec::new();
+        let mut head_bytes = 0usize;
         loop {
             let mut line = String::new();
             if reader.read_line(&mut line).unwrap_or(0) == 0 {
                 break 'outer;
+            }
+            head_bytes += line.len();
+            // 头部总量上限: read_line 单行无界, 恶意客户端可用无换行巨包撑爆内存
+            if head_bytes > 64 * 1024 {
+                let _ = write_simple(&mut stream, 431, "Request Header Fields Too Large", None, false);
+                return;
             }
             let line = line.trim_end().to_string();
             if line.is_empty() {

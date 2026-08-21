@@ -166,6 +166,16 @@ void ftpStop() {
   _ftpStop();
 }
 
+/// 停止并等待 FTP 真正退出(最多 ~1s), 避免重启时端口仍被占用。
+Future<bool> ftpStopAndWait() async {
+  ftpStop();
+  for (var i = 0; i < 50; i++) {
+    if (!ftpRunning()) return true;
+    await Future.delayed(const Duration(milliseconds: 20));
+  }
+  return !ftpRunning();
+}
+
 bool ftpRunning() => _ftpIsRunning() != 0;
 
 /// root: 共享根目录。settingsFile: 设置文件路径(存放口令, 可空)。port: 0=自动。
@@ -189,6 +199,17 @@ int engineStart(String root, String settingsFile, int port) {
 
 void engineStop() {
   _engineStop();
+}
+
+/// 停止并等待引擎真正退出(Rust 侧轮询间隔 50ms, 最多等 ~1s)。
+/// 不等就重启会有端口仍被旧监听占用、启动失败的竞态。
+Future<bool> engineStopAndWait() async {
+  engineStop();
+  for (var i = 0; i < 50; i++) {
+    if (!engineRunning()) return true;
+    await Future.delayed(const Duration(milliseconds: 20));
+  }
+  return !engineRunning();
 }
 
 bool engineRunning() => _engineRunning() != 0;

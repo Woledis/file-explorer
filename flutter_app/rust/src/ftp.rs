@@ -31,16 +31,19 @@ pub fn serve(root: &str, port: u16) -> io::Result<()> {
 
 /// 在已绑定的监听器上运行, 便于调用方读取实际端口。STOP 标志在进来时复位。
 pub fn serve_on(listener: TcpListener, root: &str) -> io::Result<()> {
-    STOP.store(false, Ordering::SeqCst);
+    STOP.store(false, SeqCst);
     let root = String::from(root.trim_end_matches('/'));
     let root = std::sync::Arc::new(root);
     let active = std::sync::Arc::new(AtomicUsize::new(0));
+    // 非阻塞轮询, 让 request_stop() 在 100ms 内生效(见 lib.rs 同款注释)
+    listener.set_nonblocking(true).ok();
     loop {
-        if STOP.swap(false, Ordering::SeqCst) {
+        if STOP.load(Ordering::SeqCst) {
             break;
         }
         match listener.accept() {
             Ok((stream, _)) => {
+                stream.set_nonblocking(false).ok();
                 if active.load(Ordering::Relaxed) >= MAX_CONN {
                     // 并发连接超限: 快速拒绝再进入的会话, 防线程失控堆积
                     let _ = write!(&mut &stream, "421 Too many connections, try later\r\n");
@@ -54,7 +57,12 @@ pub fn serve_on(listener: TcpListener, root: &str) -> io::Result<()> {
                     active.fetch_sub(1, Ordering::Relaxed);
                 });
             }
-            Err(_) => continue,
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            Err(_) => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
         }
     }
     Ok(())
@@ -64,7 +72,17 @@ pub fn serve_on(listener: TcpListener, root: &str) -> io::Result<()> {
 
 fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
     let mut stream = stream;
-    stream.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+    // 控制连接空闲超时: 5s 会把正常空闲的会话(FileZilla 保活/用户思考)误杀,
+    // 提到 300s; 真正的死连接由 accept 侧与 TCP 自身回收。
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(300)))
+        .ok();
+    // PASV 应答里的 IP 必须是客户端实际连进来的网卡地址(通常是 Wi-Fi),
+    // 否则双网络(流量+Wi-Fi)时会广播流量网卡 IP, 数据连接连不上。
+    let ctrl_ip = stream
+        .local_addr()
+        .map(|a| a.ip().to_string())
+        .unwrap_or_else(local_ip);
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return Ok(()),
@@ -102,11 +120,9 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
                 None
             }
             "PASS" => {
-                let ok = if arg.is_empty() {
-                    true
-                } else {
-                    settings::verify(&arg) || settings::get_password().is_empty()
-                };
+                // 已设口令时必须校验; 未设口令则放行。修复: 旧逻辑空 arg 直接 true,
+                // 属于设了口令也能匿名登录的漏洞。
+                let ok = settings::get_password().is_empty() || settings::verify(&arg);
                 if ok {
                     reply(&mut stream, "230 Logged in")?;
                 } else {
@@ -141,12 +157,7 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
                 None
             }
             "CWD" => {
-                let cur = cwd.clone();
-                let new = if arg.starts_with('/') {
-                    norm_path(&arg)
-                } else {
-                    norm_path(&format!("{}/{}", cur, arg))
-                };
+                let new = join_arg(&cwd, &arg);
                 if let Some(abs) = to_abs(root, &new) {
                     if Path::new(&abs).is_dir() {
                         cwd = new;
@@ -180,7 +191,7 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
                 match TcpListener::bind(("0.0.0.0", 0)) {
                     Ok(l) => {
                         let port = l.local_addr().map(|a| a.port()).unwrap_or(0);
-                        let ip = local_ip();
+                        let ip = ctrl_ip.clone();
                         let nums: Vec<&str> = ip.split('.').collect();
                         if nums.len() != 4 {
                             reply(&mut stream, "425 Cannot open data connection")?;
@@ -263,7 +274,7 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
                 rmdir(&mut stream, root, &cwd, &arg)
             }
             "RNFR" => {
-                match to_abs(root, &format!("{}/{}", cwd, arg)) {
+                match to_abs(root, &join_arg(&cwd, &arg)) {
                     Some(abs) if Path::new(&abs).exists() => {
                         rnfr = Some(abs);
                         reply(&mut stream, "350 Ready for RNTO")?;
@@ -274,7 +285,7 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
             }
             "RNTO" => {
                 match rnfr.take() {
-                    Some(from) => match to_abs(root, &format!("{}/{}", cwd, arg)) {
+                    Some(from) => match to_abs(root, &join_arg(&cwd, &arg)) {
                         Some(to) => {
                             if std::fs::rename(&from, &to).is_ok() {
                                 reply(&mut stream, "250 Rename successful")?;
@@ -312,7 +323,7 @@ fn list_dir(
     nlst: bool,
 ) -> Option<()> {
     let d = data?;
-    let dir_path = match to_abs(root, &if arg.is_empty() { cwd.to_string() } else { format!("{}/{}", cwd, arg) }) {
+    let dir_path = match to_abs(root, &if arg.is_empty() { cwd.to_string() } else { join_arg(cwd, arg) }) {
         Some(p) if Path::new(&p).is_dir() => p,
         _ => {
             reply(stream, "550 No such directory").ok()?;
@@ -321,8 +332,7 @@ fn list_dir(
     };
     let read = std::fs::read_dir(&dir_path).ok()?;
     reply(stream, "150 Opening data connection").ok()?;
-    let ds = d.accept().map(|(s, _)| s).ok()?;
-    let mut ds = ds;
+    let mut ds = open_data(Some(d), stream)?;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -405,7 +415,7 @@ fn store(
 }
 
 fn size_of(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()> {
-    let abs = to_abs(root, &format!("{}/{}", cwd, arg))?;
+    let abs = to_abs(root, &join_arg(cwd, arg))?;
     match std::fs::metadata(&abs) {
         Ok(m) if m.is_file() => reply(stream, &format!("213 {}", m.len())).ok(),
         _ => reply(stream, "550 No such file").ok(),
@@ -413,7 +423,7 @@ fn size_of(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<(
 }
 
 fn mdtm_of(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()> {
-    let abs = to_abs(root, &format!("{}/{}", cwd, arg))?;
+    let abs = to_abs(root, &join_arg(cwd, arg))?;
     match std::fs::metadata(&abs).and_then(|m| m.modified()) {
         Ok(t) => reply(stream, &format!("213 {}", ftp_time(t))).ok(),
         _ => reply(stream, "550 No such file").ok(),
@@ -421,7 +431,7 @@ fn mdtm_of(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<(
 }
 
 fn del(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()> {
-    let abs = to_abs(root, &format!("{}/{}", cwd, arg))?;
+    let abs = to_abs(root, &join_arg(cwd, arg))?;
     if std::fs::remove_file(&abs).is_ok() {
         reply(stream, "250 Deleted").ok()
     } else {
@@ -430,7 +440,7 @@ fn del(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()> {
 }
 
 fn mkdir(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()> {
-    let abs = to_abs(root, &format!("{}/{}", cwd, arg))?;
+    let abs = to_abs(root, &join_arg(cwd, arg))?;
     match std::fs::create_dir(&abs) {
         Ok(()) => reply(stream, "257 Created").ok(),
         Err(_) => reply(stream, "550 Cannot create").ok(),
@@ -438,7 +448,7 @@ fn mkdir(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()>
 }
 
 fn rmdir(stream: &mut TcpStream, root: &str, cwd: &str, arg: &str) -> Option<()> {
-    let abs = to_abs(root, &format!("{}/{}", cwd, arg))?;
+    let abs = to_abs(root, &join_arg(cwd, arg))?;
     if std::fs::remove_dir(&abs).is_ok() {
         reply(stream, "250 Removed").ok()
     } else {
@@ -493,6 +503,16 @@ fn to_abs(root: &str, rel_abs: &str) -> Option<String> {
         Some(joined.to_string_lossy().into_owned())
     } else {
         None
+    }
+}
+
+/// 拼接 cwd 与 arg; arg 以 / 开头时视为绝对路径(部分客户端会发绝对路径,
+/// 旧实现一律拼在 cwd 下导致 550)。
+fn join_arg(cwd: &str, arg: &str) -> String {
+    if arg.starts_with('/') {
+        norm_path(arg)
+    } else {
+        norm_path(&format!("{}/{}", cwd, arg))
     }
 }
 
@@ -560,12 +580,32 @@ fn ls_line(name: &str, m: &std::fs::Metadata, now: i64) -> String {
 
 // ---------------------------------------------------------------- generic data transfer
 
+/// 等待客户端连入数据端口, 最多 30s。
+/// 旧实现无限阻塞: 客户端中途放弃会永久挂死线程, 8 个连接额度被耗光后 FTP 瘫痪。
 fn open_data(data: Option<TcpListener>, _stream: &mut TcpStream) -> Option<TcpStream> {
     let l = data?;
-    let ds = l.accept().ok()?.0;
-    Some(ds)
+    l.set_nonblocking(true).ok()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        match l.accept() {
+            Ok((s, _)) => {
+                // 监听器非阻塞时, 部分平台 accept 出的 socket 继承该标志, 显式恢复
+                s.set_nonblocking(false).ok();
+                s.set_read_timeout(Some(std::time::Duration::from_secs(300))).ok();
+                s.set_write_timeout(Some(std::time::Duration::from_secs(300))).ok();
+                return Some(s);
+            }
+            Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                if std::time::Instant::now() >= deadline {
+                    return None;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            Err(_) => return None,
+        }
+    }
 }
 
 fn rest_of(root: &str, cwd: &str, arg: &str) -> Option<String> {
-    to_abs(root, &format!("{}/{}", cwd, arg))
+    to_abs(root, &join_arg(cwd, arg))
 }

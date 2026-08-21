@@ -53,7 +53,11 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() => _lanIp = ip);
   }
 
-  void _startEngine() {
+  Future<void> _startEngine() async {
+    // 已在设置页启动时先重启, 保证端口/口令设置生效
+    if (engineRunning()) {
+      await engineStopAndWait();
+    }
     final port = engineStart(_root, _settingsFile, 0);
     if (port <= 0) {
       _setStatus(status: '启动失败');
@@ -63,8 +67,8 @@ class _HomePageState extends State<HomePage> {
     syncKeepAlive();
   }
 
-  void _stopEngine() {
-    engineStop();
+  Future<void> _stopEngine() async {
+    await engineStopAndWait();
     _setStatus(status: '已停止', running: false, port: 0);
     syncKeepAlive();
   }
