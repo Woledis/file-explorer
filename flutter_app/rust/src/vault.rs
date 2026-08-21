@@ -26,13 +26,13 @@ fn pbkdf2_sha256(password: &[u8], salt: &[u8], iters: u32, dklen: usize) -> Vec<
     let mut out = Vec::with_capacity(dklen);
     let mut block: u32 = 1;
     while out.len() < dklen {
-        let mut mac = HmacSha256::new_from_slice(password).unwrap();
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(password).unwrap();
         mac.update(salt);
         mac.update(&block.to_be_bytes());
         let mut u: Vec<u8> = mac.finalize().into_bytes().to_vec();
         let mut t = u.clone();
         for _ in 1..iters {
-            let mut m = HmacSha256::new_from_slice(password).unwrap();
+            let mut m = <HmacSha256 as Mac>::new_from_slice(password).unwrap();
             m.update(&u);
             u = m.finalize().into_bytes().to_vec();
             for (ti, ui) in t.iter_mut().zip(u.iter()) {
