@@ -5,8 +5,8 @@
 //! STOR(上传/REST)、SIZE/MDTM、DELE/MKD/RMD/RNFR+RNTO、TYPE、特征协商。
 //! 所有文件操作限制在 root 内, 路径做规范化防止目录穿越。
 
-use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
-use std::net::{IpAddr, TcpListener, TcpStream};
+use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -15,7 +15,6 @@ use crate::settings;
 use std::io;
 
 pub const DEFAULT_PORT: u16 = 2121;
-const IO_BUF: usize = 64 * 1024;
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -63,7 +62,6 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
     let mut reader = BufReader::new(read_stream);
 
     let mut cwd = String::from("/");
-    let mut binary = false;
     let mut data: Option<TcpListener> = None;
     let mut rest: u64 = 0;
     let mut rnfr: Option<String> = None;
@@ -125,7 +123,6 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
                 None
             }
             "TYPE" => {
-                binary = arg.starts_with('I');
                 reply(&mut stream, "200 Type set")?;
                 None
             }
@@ -290,7 +287,6 @@ fn handle(stream: TcpStream, root: &str) -> io::Result<()> {
         if let Some(e) = err {
             let _ = e;
         }
-        rest = 0;
     }
     Ok(())
 }
@@ -315,7 +311,8 @@ fn list_dir(
     };
     let read = std::fs::read_dir(&dir_path).ok()?;
     reply(stream, "150 Opening data connection").ok()?;
-    let mut ds = d.accept().ok()?;
+    let ds = d.accept().map(|(s, _)| s).ok()?;
+    let mut ds = ds;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -518,7 +515,7 @@ fn to_ymd(secs: i64) -> (i32, u32, u32, u32, u32) {
     let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
     let m = ((if mp < 10 { mp + 3 } else { mp - 9 }) as i32) as u32;
     let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d, (t / 3600) as u32, ((t % 3600) / 60) as u32)
+    (y as i32, m, d, (t / 3600) as u32, ((t % 3600) / 60) as u32)
 }
 
 fn ftp_time(t: std::time::SystemTime) -> String {
@@ -555,7 +552,7 @@ fn ls_line(name: &str, m: &std::fs::Metadata, now: i64) -> String {
 
 fn open_data(data: Option<TcpListener>, stream: &mut TcpStream) -> Option<TcpStream> {
     let l = data?;
-    let ds = l.accept().ok()?;
+    let ds = l.accept().ok()?.0;
     Some(ds)
 }
 
