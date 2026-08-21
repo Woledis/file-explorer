@@ -25,6 +25,9 @@ pub struct Request {
 }
 
 pub fn handle_conn(mut stream: TcpStream, root: Arc<String>) {
+    // 控制连接开 NODELAY: 小请求(目录/登录/文件头)即时发送, 低延迟更跟手。
+    // 大文件流式传输由 64KB 分块写满缓冲, 不受影响。
+    let _ = stream.set_nodelay(true);
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
@@ -333,7 +336,8 @@ fn serve_dir(w: &mut impl Write, path: &Path, req: &Request, json: bool, keep: b
             if n.starts_with('.') {
                 continue;
             }
-            let is_dir = e.metadata().map(|m| m.is_dir()).unwrap_or(false);
+            // file_type 常被 readdir 缓存, 免一次 stat 系统调用(大目录感知更快)
+            let is_dir = e.file_type().map(|t| t.is_dir()).unwrap_or(false);
             items.push((is_dir, n));
         }
     }
