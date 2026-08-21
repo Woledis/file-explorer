@@ -32,3 +32,28 @@ fi
 # 展示结果
 echo "---- manifest head ----"
 sed -n '1,12p' "$MANIFEST"
+
+# 前台服务(flutter_foreground_task): 权限 + service 声明(Android 13/14 类型要求)
+python3 - "$MANIFEST" <<'PY'
+import sys,re
+p=sys.argv[1]
+s=open(p,encoding='utf-8').read()
+
+perms='''    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+'''
+if 'FOREGROUND_SERVICE' not in s:
+    s=s.replace('<application', perms+'    <application',1)
+
+srv='''        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="dataSync"
+            android:exported="false" />
+'''
+if 'ForegroundService' not in s:
+    s=re.sub(r'(<application\b[^>]*>)', lambda m: m.group(1)+'\n'+srv, s, count=1)
+
+open(p,'w',encoding='utf-8').write(s)
+print("foreground service injected")
+PY

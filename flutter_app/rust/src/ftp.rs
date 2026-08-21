@@ -8,13 +8,14 @@
 use std::io::{BufRead, BufReader, BufWriter, Seek, SeekFrom, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use crate::settings;
 
 use std::io;
 
 pub const DEFAULT_PORT: u16 = 2121;
+const MAX_CONN: usize = 8;
 
 static STOP: AtomicBool = AtomicBool::new(false);
 
@@ -33,15 +34,24 @@ pub fn serve_on(listener: TcpListener, root: &str) -> io::Result<()> {
     STOP.store(false, Ordering::SeqCst);
     let root = String::from(root.trim_end_matches('/'));
     let root = std::sync::Arc::new(root);
+    let active = std::sync::Arc::new(AtomicUsize::new(0));
     loop {
         if STOP.swap(false, Ordering::SeqCst) {
             break;
         }
         match listener.accept() {
             Ok((stream, _)) => {
+                if active.load(Ordering::Relaxed) >= MAX_CONN {
+                    // 并发连接超限: 快速拒绝再进入的会话, 防线程失控堆积
+                    let _ = write!(&mut &stream, "421 Too many connections, try later\r\n");
+                    continue;
+                }
                 let root = std::sync::Arc::clone(&root);
+                let active = std::sync::Arc::clone(&active);
                 std::thread::spawn(move || {
+                    active.fetch_add(1, Ordering::Relaxed);
                     let _ = handle(stream, &root);
+                    active.fetch_sub(1, Ordering::Relaxed);
                 });
             }
             Err(_) => continue,

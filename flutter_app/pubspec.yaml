@@ -14,6 +14,8 @@ dependencies:
   # 保险箱文件选择 + 私有可写目录
   file_picker: ^8.1.2
   path_provider: ^2.1.4
+  # 服务前台化: HTTP/FTP 运行时保持后台存活, 停止即移除(不常驻)
+  flutter_foreground_task: ^10.0.0
 
 dev_dependencies:
   flutter_test:

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../filebridge_bridge.dart';
+import '../keepalive.dart';
 
 /// 主页: 核心状态 + 服务启停 + 访问地址。
 class HomePage extends StatefulWidget {
@@ -15,6 +16,9 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   static const String _root = '/storage/emulated/0';
+  // 与设置页共用同一设置文件, 保证访问口令一致
+  static const String _settingsFile =
+      '/data/data/com.filebridge.app/settings.txt';
 
   String _status = '未启动';
   String _lanIp = '';
@@ -50,18 +54,19 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _startEngine() {
-    final settingsFile = '${Directory.systemTemp.path}/filebridge_settings.txt';
-    final port = engineStart(_root, settingsFile, 0);
+    final port = engineStart(_root, _settingsFile, 0);
     if (port <= 0) {
       _setStatus(status: '启动失败');
       return;
     }
     _setStatus(status: '运行中', running: true, port: port);
+    syncKeepAlive();
   }
 
   void _stopEngine() {
     engineStop();
     _setStatus(status: '已停止', running: false, port: 0);
+    syncKeepAlive();
   }
 
   void _setStatus({required String status, bool running = false, int port = 0}) {

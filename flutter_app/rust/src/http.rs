@@ -29,6 +29,10 @@ pub fn handle_conn(mut stream: TcpStream, root: Arc<String>) {
         Ok(s) => s,
         Err(_) => return,
     };
+    // 空闲读超时: keep-alive 长连接闲置 90s 自动回收, 释放线程与连接(省后台功耗/资源)
+    read_stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(90)))
+        .ok();
     let mut reader = BufReader::new(read_stream);
     'outer: loop {
         let mut head_lines: Vec<String> = Vec::new();

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'keepalive.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
 import 'pages/vault_page.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  initKeepAlive();
   runApp(const FileBridgeApp());
 }
 

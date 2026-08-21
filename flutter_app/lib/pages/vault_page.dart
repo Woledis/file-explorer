@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,7 @@ import '../filebridge_bridge.dart';
 
 /// 保险箱页: 用口令把文件加密为 FBE 格式存入私有保险箱目录; 可反向解密取回。
 /// 静态加密默认关闭——不选择"加密"操作即不产生任何加密文件。
+/// 加解密在后台 isolate 执行, 避免 PBKDF2/AES-GCM 阻塞 UI。
 class VaultPage extends StatefulWidget {
   const VaultPage({super.key});
 
@@ -19,6 +21,7 @@ class _VaultPageState extends State<VaultPage> {
   final _password = TextEditingController();
   String _dir = '';
   String _log = '';
+  bool _busy = false;
 
   @override
   void initState() {
@@ -65,8 +68,13 @@ class _VaultPageState extends State<VaultPage> {
     }
     final fname = file.name.contains('.fbv') ? file.name : '${file.name}.fbv';
     final dst = '$_dir/$fname';
-    final ok = await Future(() => vaultEncryptFile(src, dst, pw));
-    _append(ok ? '已加密: $fname' : '加密失败(口令或文件问题)');
+    setState(() => _busy = true);
+    try {
+      final ok = await Isolate.run(() => vaultEncryptFile(src, dst, pw));
+      _append(ok ? '已加密: $fname' : '加密失败(口令或文件问题)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _decrypt() async {
@@ -86,8 +94,13 @@ class _VaultPageState extends State<VaultPage> {
     // 去掉 .fbv 后缀作为解密输出名
     final outName = file.name.replaceFirst(RegExp(r'\.fbv$'), '');
     final dst = '$_dir/${outName.isEmpty ? 'decrypted' : outName}';
-    final ok = await Future(() => vaultDecryptFile(src, dst, pw));
-    _append(ok ? '已解密: $outName' : '解密失败(口令错误或文件非法)');
+    setState(() => _busy = true);
+    try {
+      final ok = await Isolate.run(() => vaultDecryptFile(src, dst, pw));
+      _append(ok ? '已解密: $outName' : '解密失败(口令错误或文件非法)');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -122,15 +135,21 @@ class _VaultPageState extends State<VaultPage> {
             children: [
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: _encrypt,
-                  icon: const Icon(Icons.lock_outline),
+                  onPressed: _busy ? null : _encrypt,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.lock_outline),
                   label: const Text('选文件并加密'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: _decrypt,
+                  onPressed: _busy ? null : _decrypt,
                   icon: const Icon(Icons.lock_open),
                   label: const Text('选 .fbv 解密'),
                 ),

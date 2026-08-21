@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../filebridge_bridge.dart';
+import '../keepalive.dart';
 
 /// 设置页: 访问口令(简化设置, 无需旧口令/重复输入) + FTP 服务 + 深浅色切换。
 class SettingsPage extends StatefulWidget {
@@ -55,12 +56,14 @@ class _SettingsPageState extends State<SettingsPage> {
         _httpOn = true;
         _httpPort = port;
       });
+      syncKeepAlive();
     } else {
       engineStop();
       setState(() {
         _httpOn = false;
         _httpPort = 0;
       });
+      syncKeepAlive();
     }
   }
 
@@ -99,12 +102,14 @@ class _SettingsPageState extends State<SettingsPage> {
         _ftpOn = true;
         _ftpActual = port;
       });
+      syncKeepAlive();
     } else {
       ftpStop();
       setState(() {
         _ftpOn = false;
         _ftpActual = 0;
       });
+      syncKeepAlive();
     }
   }
 
