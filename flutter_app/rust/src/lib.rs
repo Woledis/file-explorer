@@ -100,11 +100,12 @@ pub extern "C" fn fb_engine_start(
         settings::init(&settings_path);
     }
 
-    // port==0 时读取已配置的 HTTP 端口(未配置则回退自动分配)
+    // port==0 时读取已配置的 HTTP 端口; 未配置(0)则由系统自动分配。
+    // 旧写法 `.max(1)` 会把未配置变成端口 1(系统保留端口) -> bind 必失败 -> 一直"启动失败"。
     let bind_port: u16 = if port == 0 {
-        settings::get_http_port().max(1)
+        settings::get_http_port()
     } else {
-        port.max(1) as u16
+        port.max(0) as u16
     };
     let listener = match std::net::TcpListener::bind(("0.0.0.0", bind_port)) {
         Ok(l) => l,
