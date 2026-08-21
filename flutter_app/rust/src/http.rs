@@ -13,6 +13,7 @@ use crate::auth;
 use crate::settings;
 
 pub const IO_BUF: usize = 64 * 1024;
+const MAX_LOGIN_BODY: usize = 64 * 1024;
 
 pub struct Request {
     pub method: String,
@@ -49,6 +50,14 @@ pub fn handle_conn(mut stream: TcpStream, root: Arc<String>) {
         let keep = req.version.contains("1.1");
 
         if req.method == "POST" {
+            if req.content_length > MAX_LOGIN_BODY {
+                skip_body(&mut reader, req.content_length);
+                let _ = write_simple(&mut stream, 413, "Payload Too Large", None, keep);
+                if !keep {
+                    break;
+                }
+                continue 'outer;
+            }
             let cl = req.content_length;
             let mut body = vec![0u8; cl];
             let mut read = 0;
@@ -284,11 +293,12 @@ fn serve_put(
     }
     let _ = file.flush();
     if ok {
+        let body = format!("wrote {} bytes", written);
         let header = format!(
-            "HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: {}\r\n\r\nwrote {} bytes",
-            written.to_string().len(),
+            "HTTP/1.1 201 Created\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: {}\r\n\r\n{}",
+            body.len(),
             conn(keep),
-            written
+            body
         );
         let _ = w.write_all(header.as_bytes());
         let _ = w.flush();
@@ -311,7 +321,7 @@ fn serve_get(w: &mut impl Write, req: &Request, path: &Path, keep: bool) -> bool
 }
 
 fn serve_dir(w: &mut impl Write, path: &Path, req: &Request, json: bool, keep: bool) -> bool {
-    let rel = decode_target(&req.target);
+    let rel = decode_target(&req.target).trim_matches('/').to_string();
     let mut items: Vec<(bool, String)> = Vec::new();
     if let Ok(rd) = std::fs::read_dir(path) {
         for e in rd.flatten() {
@@ -508,6 +518,14 @@ fn esc(s: &str) -> String {
 fn single_range(size: u64, range: Option<(u64, u64)>) -> (u64, u64, u16) {
     match range {
         None => (0, size.saturating_sub(1), 200),
+        // bytes=-N: 取文件最后 N 字节, 以 (u64::MAX, N) 编码
+        Some((u64::MAX, n)) => {
+            if size == 0 || n == 0 {
+                return (0, 0, 416);
+            }
+            let start = size.saturating_sub(n);
+            (start, size - 1, 206)
+        }
         Some((s, e)) => {
             if s >= size || (e != u64::MAX && s > e) {
                 return (0, 0, 416);
@@ -521,8 +539,13 @@ fn single_range(size: u64, range: Option<(u64, u64)>) -> (u64, u64, u16) {
 fn parse_range(h: Option<&str>) -> Option<(u64, u64)> {
     let v = h?;
     let suffix = v.trim().strip_prefix("bytes=")?;
-    if suffix.starts_with('-') && !suffix.starts_with("-0") {
-        return None;
+    // bytes=-N => 最后 N 字节
+    if let Some(rest) = suffix.trim_start().strip_prefix('-') {
+        let n: u64 = rest.trim().parse().ok()?;
+        if n == 0 {
+            return None;
+        }
+        return Some((u64::MAX, n));
     }
     let mut it = suffix.splitn(2, '-');
     let s: u64 = it.next()?.trim().parse().ok()?;
