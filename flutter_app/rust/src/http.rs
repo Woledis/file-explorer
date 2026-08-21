@@ -23,7 +23,7 @@ pub struct Request {
     pub content_length: usize,
 }
 
-pub fn handle_conn(stream: TcpStream, root: Arc<String>) {
+pub fn handle_conn(mut stream: TcpStream, root: Arc<String>) {
     let read_stream = match stream.try_clone() {
         Ok(s) => s,
         Err(_) => return,
@@ -342,7 +342,7 @@ fn serve_dir(w: &mut impl Write, path: &Path, req: &Request, json: bool, keep: b
         );
     }
 
-    let mut html = String::from(
+    let mut html = format!(
         "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">\
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
          <title>FileBridge</title>\
