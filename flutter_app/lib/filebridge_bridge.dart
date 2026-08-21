@@ -72,6 +72,35 @@ String rustGreet(String name) {
   }
 }
 
+// ---- passsword ----
+typedef _SetPwNative = Int32 Function(Pointer<Utf8>);
+typedef _SetPwDart = int Function(Pointer<Utf8>);
+typedef _GetPwNative = Pointer<Utf8> Function();
+typedef _GetPwDart = Pointer<Utf8> Function();
+
+final _getPassword = _lib.lookupFunction<_GetPwNative, _GetPwDart>('fb_get_password');
+final _setPassword = _lib.lookupFunction<_SetPwNative, _SetPwDart>('fb_set_password');
+
+/// 当前访问口令(可能为空=开放访问)。
+String rustGetPassword() {
+  final p = _getPassword();
+  try {
+    return p.toDartString();
+  } finally {
+    _free(p.cast());
+  }
+}
+
+/// 设置访问口令(空串=取消口令, 开放访问)。
+bool rustSetPassword(String pw) {
+  final p = pw.toNativeUtf8();
+  try {
+    return _setPassword(p.cast()) != 0;
+  } finally {
+    calloc.free(p);
+  }
+}
+
 /// root: 共享根目录。settingsFile: 设置文件路径(存放口令, 可空)。port: 0=自动。
 /// 返回实际端口；返回 <=0 表示启动失败。
 int engineStart(String root, String settingsFile, int port) {

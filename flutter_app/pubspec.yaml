@@ -11,6 +11,9 @@ dependencies:
   flutter:
     sdk: flutter
   ffi: ^2.1.2
+  # 保险箱文件选择 + 私有可写目录
+  file_picker: ^8.1.2
+  path_provider: ^2.1.4
 
 dev_dependencies:
   flutter_test:
