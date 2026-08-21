@@ -65,3 +65,17 @@ if new != s:
 else:
     print('compileSdk line not found (leaving as-is)')
 PY
+
+# MANAGE_EXTERNAL_STORAGE 仅在 targetSdk>=30 时对应用可见/可授予。
+# 固定 targetSdk=34、minSdk=26, 防止 flutter 脚手架把 targetSdk 拉低, 否则安卓13上「所有文件访问」开关会被系统置灰。
+python3 - "$GRADLE" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+s = re.sub(r'minSdk\s*=\s*flutter\.minSdkVersion', 'minSdk = 26', s)
+s = re.sub(r'targetSdk\s*=\s*flutter\.targetSdkVersion', 'targetSdk = 34', s)
+s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 26', s)
+s = re.sub(r'targetSdkVersion\s+flutter\.targetSdkVersion', 'targetSdkVersion 34', s)
+open(p, 'w', encoding='utf-8').write(s)
+print('targetSdk=34, minSdk=26 pinned')
+PY

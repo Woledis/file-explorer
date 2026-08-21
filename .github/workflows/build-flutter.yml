@@ -90,6 +90,21 @@ jobs:
             --target-platform android-arm64 \
             --obfuscate --split-debug-info=build/symbols
 
+      - name: Verify MANAGE_EXTERNAL_STORAGE is in final APK
+        run: |
+          set -euo pipefail
+          APK=$(find flutter_app/build/app/outputs/flutter-apk -name '*.apk' | head -n1)
+          echo "checking APK: $APK"
+          AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | sort -V | tail -n1)
+          echo "using aapt: $AAPT"
+          if "$AAPT" dump permissions "$APK" | grep -q 'MANAGE_EXTERNAL_STORAGE'; then
+            echo "OK: MANAGE_EXTERNAL_STORAGE present in APK"
+          else
+            echo "!!! MANAGE_EXTERNAL_STORAGE MISSING in final APK"
+            "$AAPT" dump permissions "$APK" || true
+            exit 1
+          fi
+
       - name: Upload Flutter APKs
         uses: actions/upload-artifact@v4
         with:
