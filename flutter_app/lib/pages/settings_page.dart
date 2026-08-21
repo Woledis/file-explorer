@@ -1,8 +1,10 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../filebridge_bridge.dart';
 
-/// 设置页: 访问口令(简化设置, 无需旧口令/重复输入) + 深浅色切换。
+/// 设置页: 访问口令(简化设置, 无需旧口令/重复输入) + FTP 服务 + 深浅色切换。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.onThemeChanged});
 
@@ -13,21 +15,70 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
+  static const String _root = '/storage/emulated/0';
+  static const int _ftpPort = 2121;
+
   final _password = TextEditingController();
   bool _passwordEnabled = false;
   ThemeMode _theme = ThemeMode.system;
+  bool _ftpOn = false;
+  int _ftpActual = 0;
+  String _lanIp = '';
 
   @override
   void initState() {
     super.initState();
     _load();
+    _findIp();
   }
 
   void _load() {
-    final pw = rustGetPassword();
-    _passwordEnabled = pw.isNotEmpty;
-    if (pw.isNotEmpty) {
-      // 不回显已有口令, 留空让用户选择是否修改
+    _passwordEnabled = rustGetPassword().isNotEmpty;
+    _ftpOn = ftpRunning();
+    _ftpActual = _ftpPort;
+  }
+
+  Future<void> _findIp() async {
+    String ip = '';
+    try {
+      final interfaces = await NetworkInterface.list(
+        includeLoopback: false,
+        type: InternetAddressType.IPv4,
+      );
+      for (final ifc in interfaces) {
+        for (final addr in ifc.addresses) {
+          if (addr.address.startsWith('192.168.') ||
+              addr.address.startsWith('10.') ||
+              addr.address.startsWith('172.')) {
+            ip = addr.address;
+            break;
+          }
+        }
+        if (ip.isNotEmpty) break;
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _lanIp = ip);
+  }
+
+  void _toggleFtp(bool on) {
+    if (on) {
+      final port = ftpStart(_root, _ftpPort);
+      if (port <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('FTP 启动失败, 可能端口被占用')),
+        );
+        return;
+      }
+      setState(() {
+        _ftpOn = true;
+        _ftpActual = port;
+      });
+    } else {
+      ftpStop();
+      setState(() {
+        _ftpOn = false;
+        _ftpActual = 0;
+      });
     }
   }
 
@@ -79,6 +130,21 @@ class _SettingsPageState extends State<SettingsPage> {
               onPressed: _savePassword,
               icon: const Icon(Icons.save_outlined),
               label: const Text('保存口令'),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Card(
+            margin: EdgeInsets.zero,
+            child: SwitchListTile(
+              secondary: const Icon(Icons.dns_outlined),
+              title: const Text('FTP 服务'),
+              subtitle: Text(
+                _ftpActual > 0 && _ftpOn
+                    ? '电脑文件管理器访问: ftp://$_lanIp:$_ftpActual'
+                    : '给电脑提供 FTP 文件共享(端口 $_ftpPort)',
+              ),
+              value: _ftpOn,
+              onChanged: _toggleFtp,
             ),
           ),
           const SizedBox(height: 28),

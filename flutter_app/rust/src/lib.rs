@@ -4,6 +4,7 @@
 //! 支持目录 HTML/JSON 列表、GET/HEAD 下载 + Range 断点、口令登录(cookie 会话)。
 
 mod auth;
+mod ftp;
 mod http;
 mod settings;
 mod vault;
@@ -105,6 +106,50 @@ pub extern "C" fn fb_engine_start(
 pub extern "C" fn fb_engine_stop() -> c_int {
     STOP.store(true, Ordering::SeqCst);
     1
+}
+
+// ----------------------------------------------------------------- ftp
+
+static FTP_RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// 启动 FTP 服务(端口 2121 或自定)。返回实际端口; 0 = 启动失败。
+#[no_mangle]
+pub extern "C" fn fb_ftp_start(
+    root: *const c_char,
+    port: c_int,
+    out_port: *mut c_int,
+) -> c_int {
+    if FTP_RUNNING.load(Ordering::SeqCst) {
+        return 0;
+    }
+    match std::net::TcpListener::bind(("0.0.0.0", port.max(0) as u16)) {
+        Ok(listener) => {
+            let actual = listener.local_addr().map(|a| a.port()).unwrap_or(0);
+            if !out_port.is_null() {
+                unsafe { *out_port = actual as c_int; }
+            }
+            FTP_RUNNING.store(true, Ordering::SeqCst);
+            let root = read_cstr(root).unwrap_or_else(|| String::from("/storage/emulated/0"));
+            let root = Arc::new(root);
+            std::thread::spawn(move || {
+                let _ = ftp::serve_on(listener, &root);
+                FTP_RUNNING.store(false, Ordering::SeqCst);
+            });
+            1
+        }
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fb_ftp_stop() -> c_int {
+    ftp::request_stop();
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_ftp_is_running() -> c_int {
+    to_int(FTP_RUNNING.load(Ordering::SeqCst))
 }
 
 // ----------------------------------------------------------------- password

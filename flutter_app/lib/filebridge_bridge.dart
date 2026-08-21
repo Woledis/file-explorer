@@ -101,6 +101,36 @@ bool rustSetPassword(String pw) {
   }
 }
 
+// ---- ftp ----
+typedef _FtpStartNative = Int32 Function(Pointer<Utf8>, Int32, Pointer<Int32>);
+typedef _FtpStartDart = int Function(Pointer<Utf8>, int, Pointer<Int32>);
+typedef _NoArgNative = Int32 Function();
+typedef _NoArgDart = int Function();
+
+final _ftpStart = _lib.lookupFunction<_FtpStartNative, _FtpStartDart>('fb_ftp_start');
+final _ftpStop = _lib.lookupFunction<_NoArgNative, _NoArgDart>('fb_ftp_stop');
+final _ftpIsRunning = _lib.lookupFunction<_NoArgNative, _NoArgDart>('fb_ftp_is_running');
+
+/// 启动 FTP 服务, 返回实际端口; <=0 = 失败。
+int ftpStart(String root, int port) {
+  final rootPtr = root.toNativeUtf8();
+  final outPort = calloc<Int32>(1);
+  try {
+    final ok = _ftpStart(rootPtr.cast(), port, outPort);
+    if (ok <= 0) return 0;
+    return outPort.value;
+  } finally {
+    calloc.free(rootPtr);
+    calloc.free(outPort);
+  }
+}
+
+void ftpStop() {
+  _ftpStop();
+}
+
+bool ftpRunning() => _ftpIsRunning() != 0;
+
 /// root: 共享根目录。settingsFile: 设置文件路径(存放口令, 可空)。port: 0=自动。
 /// 返回实际端口；返回 <=0 表示启动失败。
 int engineStart(String root, String settingsFile, int port) {
