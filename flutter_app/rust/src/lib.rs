@@ -72,6 +72,52 @@ pub extern "C" fn fb_settings_get_ftp_port() -> c_int {
     settings::get_ftp_port() as c_int
 }
 
+// ---- 服务启用 + 自定义选项 ----
+
+#[no_mangle]
+pub extern "C" fn fb_settings_set_http_enabled(on: c_int) -> c_int {
+    settings::set_http_enabled(on != 0);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_get_http_enabled() -> c_int {
+    to_int(settings::http_enabled())
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_set_ftp_enabled(on: c_int) -> c_int {
+    settings::set_ftp_enabled(on != 0);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_get_ftp_enabled() -> c_int {
+    to_int(settings::ftp_enabled())
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_set_idle_timeout(secs: c_int) -> c_int {
+    settings::set_idle_timeout(secs.max(5).min(3600) as u32);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_get_idle_timeout() -> c_int {
+    settings::get_idle_timeout() as c_int
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_set_show_hidden(on: c_int) -> c_int {
+    settings::set_show_hidden(on != 0);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_get_show_hidden() -> c_int {
+    to_int(settings::show_hidden())
+}
+
 /// Returns true if running.
 #[no_mangle]
 pub extern "C" fn fb_engine_is_running() -> c_int {

@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../filebridge_bridge.dart';
+import '../keepalive.dart';
 
-/// 主页: HTTP / FTP 服务状态 + 各自访问地址(纯展示, 控制入口在设置页)。
-/// 地址仅在对应服务运行(且检测到局域网 IP)时展示; 关闭某服务则主页不显示其地址。
+/// 主页: HTTP / FTP 服务的运行控制(启动/停止) + 状态 + 访问地址。
+/// 服务是否启用由设置页控制; 未启用的服务在主页不显示、也不能启动。
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
@@ -50,7 +51,45 @@ class _HomePageState extends State<HomePage> {
     if (mounted) setState(() => _lanIp = ip);
   }
 
-  // ---- HTTP & FTP 启停统一由设置页控制; 主页仅展示状态与地址 ----
+  // ---- 运行控制(启停)。 是否启用由设置页控制; 未启用的服务主页不渲染 ----
+
+  Future<void> _toggleHttp(bool on) async {
+    if (on) {
+      if (engineRunning()) {
+        await engineStopAndWait();
+      }
+      final port = engineStart(_root, _settingsFile, 0);
+      if (port <= 0) {
+        _toast('HTTP 启动失败, 可能端口被占用');
+        return;
+      }
+    } else {
+      await engineStopAndWait();
+    }
+    if (!mounted) return;
+    setState(() {});
+    syncKeepAlive();
+  }
+
+  Future<void> _toggleFtp(bool on) async {
+    if (on) {
+      if (ftpRunning()) {
+        await ftpStopAndWait();
+      }
+      final def = settingsGetFtpPort();
+      final port = (def > 0 && def <= 65535) ? def : 2121;
+      final actual = ftpStart(_root, port);
+      if (actual <= 0) {
+        _toast('FTP 启动失败, 可能端口被占用');
+        return;
+      }
+    } else {
+      await ftpStopAndWait();
+    }
+    if (!mounted) return;
+    setState(() {});
+    syncKeepAlive();
+  }
 
   void _toast(String msg) {
     if (!mounted) return;
@@ -82,6 +121,8 @@ class _HomePageState extends State<HomePage> {
     }
 
     final noIp = _lanIp.isEmpty;
+    final httpEnabled = settingsGetHttpEnabled();
+    final ftpEnabled = settingsGetFtpEnabled();
     final httpAddr = httpRunning && !noIp && httpPort > 0
         ? 'http://$_lanIp:$httpPort'
         : '';
@@ -102,22 +143,36 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 12),
-          _serviceCard(
-            icon: Icons.http_outlined,
-            title: 'HTTP 服务',
-            running: httpRunning,
-            runningText: '运行中 · 浏览器访问',
-            address: httpAddr,
-          ),
-          const SizedBox(height: 12),
-          _serviceCard(
-            icon: Icons.dns_outlined,
-            title: 'FTP 服务',
-            running: ftpRunning_,
-            runningText: '运行中 · 文件管理器访问',
-            address: ftpAddr,
-          ),
-          const SizedBox(height: 12),
+          if (httpEnabled) ...[
+            _serviceCard(
+              icon: Icons.http_outlined,
+              title: 'HTTP 服务',
+              running: httpRunning,
+              runningText: '运行中 · 浏览器访问',
+              address: httpAddr,
+              onToggle: _toggleHttp,
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (ftpEnabled) ...[
+            _serviceCard(
+              icon: Icons.dns_outlined,
+              title: 'FTP 服务',
+              running: ftpRunning_,
+              runningText: '运行中 · 文件管理器访问',
+              address: ftpAddr,
+              onToggle: _toggleFtp,
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (!httpEnabled && !ftpEnabled)
+            const Card(
+              child: ListTile(
+                leading: Icon(Icons.toggle_off_outlined),
+                title: Text('所有服务均未启用'),
+                subtitle: Text('请到「设置」页启用 HTTP 或 FTP 服务后再回来控制'),
+              ),
+            ),
           if (noIp)
             const Card(
               child: ListTile(
@@ -142,53 +197,73 @@ class _HomePageState extends State<HomePage> {
     required bool running,
     required String runningText,
     required String address,
+    required ValueChanged<bool> onToggle,
   }) {
-    // 开关在设置页统一控制; 主页仅展示状态与访问地址。
-    // 服务关闭时主页不显示其地址(地址为空则整行隐藏)。
+    // 服务关闭时主页不显示其地址(地址为空则整行隐藏)
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(icon),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
+            Row(
+              children: [
+                Icon(icon),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(title,
                       style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  if (!running)
-                    const Text('未开启 · 请到「设置」页开启',
-                        style: TextStyle(color: Colors.grey, fontSize: 13))
-                  else if (address.isNotEmpty)
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(address,
-                              style: const TextStyle(fontWeight: FontWeight.w500)),
-                        ),
-                        IconButton(
-                          onPressed: () => _copy(address),
-                          icon: const Icon(Icons.copy, size: 18),
-                          tooltip: '复制',
-                        ),
-                      ],
-                    )
-                  else
-                    const Text('等待局域网地址…', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
+                ),
+                if (running)
+                  Chip(
+                    label: Text(runningText),
+                    backgroundColor: Colors.green.withOpacity(.18),
+                    labelStyle: const TextStyle(color: Colors.green, fontSize: 12),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                  ),
+              ],
             ),
             if (running)
-              Chip(
-                label: Text(runningText),
-                backgroundColor: Colors.green.withOpacity(.18),
-                labelStyle: const TextStyle(color: Colors.green, fontSize: 12),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (address.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(address,
+                                style: const TextStyle(fontWeight: FontWeight.w500)),
+                          ),
+                          IconButton(
+                            onPressed: () => _copy(address),
+                            icon: const Icon(Icons.copy, size: 18),
+                            tooltip: '复制',
+                          ),
+                        ],
+                      ),
+                    ] else
+                      const Text('等待局域网地址…',
+                          style: TextStyle(color: Colors.grey)),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 8),
+                      child: Text('IP 变更后请进入本页刷新',
+                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    ),
+                  ],
+                ),
               ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                onPressed: () => onToggle(!running),
+                icon: Icon(running ? Icons.stop : Icons.play_arrow),
+                label: Text(running ? '停止服务' : '启动服务'),
+              ),
+            ),
           ],
         ),
       ),

@@ -1,11 +1,8 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../filebridge_bridge.dart';
-import '../keepalive.dart';
 
-/// 设置页: 访问口令(简化设置, 无需旧口令/重复输入) + FTP 服务 + 深浅色切换。
+/// 设置页: 访问口令 + 端口 + 服务启用/禁用 + 安全与目录自定义 + 深浅色切换。
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.onThemeChanged});
 
@@ -16,26 +13,21 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  static const String _root = '/storage/emulated/0';
-  static const String _settingsFile = '/data/data/com.filebridge.app/settings.txt';
-  static const int _ftpPort = 2121;
-
   final _password = TextEditingController();
   final _httpPortCtrl = TextEditingController();
   final _ftpPortCtrl = TextEditingController();
+  final _idleCtrl = TextEditingController();
   bool _passwordEnabled = false;
   ThemeMode _theme = ThemeMode.system;
-  bool _httpOn = false;
-  int _httpPort = 0;
-  bool _ftpOn = false;
-  int _ftpActual = 0;
-  String _lanIp = '';
+  bool _httpEnabled = true;
+  bool _ftpEnabled = true;
+  bool _showHidden = false;
+  int _idleSecs = 90;
 
   @override
   void initState() {
     super.initState();
     _load();
-    _findIp();
   }
 
   void _load() {
@@ -44,91 +36,36 @@ class _SettingsPageState extends State<SettingsPage> {
     _httpPortCtrl.text = hp > 0 ? '$hp' : '';
     _ftpPortCtrl.text = fp > 0 ? '$fp' : '';
     _passwordEnabled = rustGetPassword().isNotEmpty;
-    _httpOn = engineRunning();
-    _ftpOn = ftpRunning();
-    _ftpActual = _ftpPortCtrl.text.isEmpty ? 2121 : int.tryParse(_ftpPortCtrl.text) ?? 2121;
+    _httpEnabled = settingsGetHttpEnabled();
+    _ftpEnabled = settingsGetFtpEnabled();
+    _idleSecs = settingsGetIdleTimeout();
+    _idleCtrl.text = '$_idleSecs';
+    _showHidden = settingsGetShowHidden();
   }
 
-  Future<void> _toggleHttp(bool on) async {
-    if (on) {
-      // 已在别处(主页)启动时先重启, 保证端口设置生效且开关状态一致
-      if (engineRunning()) {
-        await engineStopAndWait();
-      }
-      final port = engineStart(_root, _settingsFile, 0);
-      if (port <= 0) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('HTTP 服务启动失败, 可能端口被占用')),
-        );
-        return;
-      }
-      setState(() {
-        _httpOn = true;
-        _httpPort = port;
-      });
-      syncKeepAlive();
-    } else {
-      await engineStopAndWait();
-      setState(() {
-        _httpOn = false;
-        _httpPort = 0;
-      });
-      syncKeepAlive();
-    }
+  // ---- 启用/禁用(主页据此显示与可控); 启用不改变当前运行状态 ----
+
+  void _toggleHttpEnabled(bool on) {
+    settingsSetHttpEnabled(on);
+    setState(() => _httpEnabled = on);
   }
 
-  Future<void> _findIp() async {
-    String ip = '';
-    try {
-      final interfaces = await NetworkInterface.list(
-        includeLoopback: false,
-        type: InternetAddressType.IPv4,
-      );
-      for (final ifc in interfaces) {
-        for (final addr in ifc.addresses) {
-          if (addr.address.startsWith('192.168.') ||
-              addr.address.startsWith('10.') ||
-              addr.address.startsWith('172.')) {
-            ip = addr.address;
-            break;
-          }
-        }
-        if (ip.isNotEmpty) break;
-      }
-    } catch (_) {}
-    if (mounted) setState(() => _lanIp = ip);
+  void _toggleFtpEnabled(bool on) {
+    settingsSetFtpEnabled(on);
+    setState(() => _ftpEnabled = on);
   }
 
-  Future<void> _toggleFtp(bool on) async {
-    if (on) {
-      // 已在别处启动时先重启, 让新端口生效
-      if (ftpRunning()) {
-        await ftpStopAndWait();
-      }
-      final def = settingsGetFtpPort();
-      final port = (def > 0 && def <= 65535) ? def : 2121;
-      final actual = ftpStart(_root, port);
-      if (actual <= 0) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('FTP 启动失败, 可能端口被占用')),
-        );
-        return;
-      }
-      setState(() {
-        _ftpOn = true;
-        _ftpActual = actual;
-      });
-      syncKeepAlive();
-    } else {
-      await ftpStopAndWait();
-      setState(() {
-        _ftpOn = false;
-        _ftpActual = 0;
-      });
-      syncKeepAlive();
-    }
+  void _saveIdleTimeout() {
+    final v = int.tryParse(_idleCtrl.text.trim());
+    final secs = (v == null || v < 5) ? 90 : v.clamp(5, 3600);
+    settingsSetIdleTimeout(secs);
+    setState(() {
+      _idleSecs = secs;
+      _idleCtrl.text = '$secs';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('会话空闲超时已保存')),
+    );
   }
 
   void _savePorts() {
@@ -168,6 +105,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _password.dispose();
     _httpPortCtrl.dispose();
     _ftpPortCtrl.dispose();
+    _idleCtrl.dispose();
     super.dispose();
   }
 
@@ -252,18 +190,19 @@ class _SettingsPageState extends State<SettingsPage> {
           const Text('服务',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
+          const Text(
+            '这里控制各服务是否启用。已启用的服务在主页显示并可由你启动/停止。',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
           Card(
             margin: EdgeInsets.zero,
             child: SwitchListTile(
               secondary: const Icon(Icons.http_outlined),
-              title: const Text('HTTP 服务'),
-              subtitle: Text(
-                _httpOn && _httpPort > 0
-                    ? '电脑浏览器访问: http://$_lanIp:$_httpPort'
-                    : '给电脑浏览器提供文件共享',
-              ),
-              value: _httpOn,
-              onChanged: _toggleHttp,
+              title: const Text('启用 HTTP 服务'),
+              subtitle: const Text('在主页显示 HTTP(浏览器)入口并可启停'),
+              value: _httpEnabled,
+              onChanged: _toggleHttpEnabled,
             ),
           ),
           const SizedBox(height: 12),
@@ -271,14 +210,58 @@ class _SettingsPageState extends State<SettingsPage> {
             margin: EdgeInsets.zero,
             child: SwitchListTile(
               secondary: const Icon(Icons.dns_outlined),
-              title: const Text('FTP 服务'),
-              subtitle: Text(
-                _ftpActual > 0 && _ftpOn
-                    ? '电脑文件管理器访问: ftp://$_lanIp:$_ftpActual'
-                    : '给电脑提供 FTP 文件共享(端口 ${settingsGetFtpPort() > 0 ? settingsGetFtpPort() : _ftpPort})',
+              title: const Text('启用 FTP 服务'),
+              subtitle: const Text('在主页显示 FTP(文件管理器)入口并可启停'),
+              value: _ftpEnabled,
+              onChanged: _toggleFtpEnabled,
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text('安全与目录',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          const Text(
+            '会话空闲超时: HTTP 长连接无活动多久后自动断开(5-3600 秒)。',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _idleCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: '会话空闲超时(秒)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _saveIdleTimeout,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('保存'),
+                    ),
+                  ),
+                  const Divider(height: 24),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('显示隐藏文件'),
+                    subtitle: const Text('在网页目录列表中显示以 . 开头的文件/夹'),
+                    value: _showHidden,
+                    onChanged: (v) {
+                      setState(() => _showHidden = v);
+                      settingsSetShowHidden(v);
+                    },
+                  ),
+                ],
               ),
-              value: _ftpOn,
-              onChanged: _toggleFtp,
             ),
           ),
           const SizedBox(height: 28),

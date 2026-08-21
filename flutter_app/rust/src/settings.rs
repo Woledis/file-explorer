@@ -11,10 +11,19 @@ static HTTP_PORT: Mutex<Option<u16>> = Mutex::new(None);
 static FTP_PORT: Mutex<Option<u16>> = Mutex::new(None);
 static SETTINGS_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 static TLS_INITIALIZED: AtomicBool = AtomicBool::new(false);
+// ---- 服务启用/自定义选项(持久化) ----
+static HTTP_ENABLED: AtomicBool = AtomicBool::new(true);
+static FTP_ENABLED: AtomicBool = AtomicBool::new(true);
+static IDLE_TIMEOUT: Mutex<Option<u32>> = Mutex::new(None); // HTTP 控制连接空闲秒数
+static SHOW_HIDDEN: AtomicBool = AtomicBool::new(false);
 
 const KEY_NAME: &str = "access_password";
 const KEY_HTTP: &str = "http_port";
 const KEY_FTP: &str = "ftp_port";
+const KEY_HTTP_ENABLED: &str = "http_enabled";
+const KEY_FTP_ENABLED: &str = "ftp_enabled";
+const KEY_IDLE: &str = "idle_timeout";
+const KEY_SHOW_HIDDEN: &str = "show_hidden";
 
 pub fn set_password(pw: &str) {
     // 先在块内释放锁再 persist(): persist 会经 get_password 再次锁
@@ -53,6 +62,43 @@ pub fn set_ftp_port(p: u16) {
 
 pub fn get_ftp_port() -> u16 {
     FTP_PORT.lock().unwrap().unwrap_or(0)
+}
+
+pub fn set_http_enabled(b: bool) {
+    HTTP_ENABLED.store(b, Ordering::SeqCst);
+    persist();
+}
+
+pub fn http_enabled() -> bool {
+    HTTP_ENABLED.load(Ordering::SeqCst)
+}
+
+pub fn set_ftp_enabled(b: bool) {
+    FTP_ENABLED.store(b, Ordering::SeqCst);
+    persist();
+}
+
+pub fn ftp_enabled() -> bool {
+    FTP_ENABLED.load(Ordering::SeqCst)
+}
+
+/// 会话空闲秒数(默认 90)。调用方应 clamp 到安全区间。
+pub fn set_idle_timeout(secs: u32) {
+    *IDLE_TIMEOUT.lock().unwrap() = (secs >= 1).then_some(secs);
+    persist();
+}
+
+pub fn get_idle_timeout() -> u32 {
+    IDLE_TIMEOUT.lock().unwrap().unwrap_or(90)
+}
+
+pub fn set_show_hidden(b: bool) {
+    SHOW_HIDDEN.store(b, Ordering::SeqCst);
+    persist();
+}
+
+pub fn show_hidden() -> bool {
+    SHOW_HIDDEN.load(Ordering::SeqCst)
 }
 
 /// 0-length probabilistic equality to reduce timing leak.
@@ -95,6 +141,10 @@ pub fn persist() {
         let _ = write!(f, "{}={}\n", KEY_NAME, pw);
         let _ = write!(f, "{}={}\n", KEY_HTTP, hp);
         let _ = write!(f, "{}={}\n", KEY_FTP, fp);
+        let _ = write!(f, "{}={}\n", KEY_HTTP_ENABLED, http_enabled());
+        let _ = write!(f, "{}={}\n", KEY_FTP_ENABLED, ftp_enabled());
+        let _ = write!(f, "{}={}\n", KEY_IDLE, get_idle_timeout());
+        let _ = write!(f, "{}={}\n", KEY_SHOW_HIDDEN, show_hidden());
         let _ = f.sync_all();
     }
 }
@@ -118,6 +168,14 @@ fn load() -> std::io::Result<()> {
                     v.trim().parse::<u16>().ok().filter(|&p| p != 0),
                 KEY_FTP => *FTP_PORT.lock().unwrap() =
                     v.trim().parse::<u16>().ok().filter(|&p| p != 0),
+                KEY_HTTP_ENABLED => HTTP_ENABLED
+                    .store(v.trim() != "0", Ordering::SeqCst),
+                KEY_FTP_ENABLED => FTP_ENABLED
+                    .store(v.trim() != "0", Ordering::SeqCst),
+                KEY_IDLE => *IDLE_TIMEOUT.lock().unwrap() =
+                    v.trim().parse::<u32>().ok().filter(|&s| s >= 1),
+                KEY_SHOW_HIDDEN => SHOW_HIDDEN
+                    .store(v.trim() != "0", Ordering::SeqCst),
                 _ => {}
             }
         }

@@ -138,6 +138,38 @@ int settingsGetFtpPort() => _getFtpPort();
 
 void settingsSetFtpPort(int port) => _setFtpPort(port);
 
+// ---- 服务启用 + 自定义选项 ----
+final _setHttpEnabled =
+    _lib.lookupFunction<_PortSetNative, _PortSetDart>('fb_settings_set_http_enabled');
+final _getHttpEnabled =
+    _lib.lookupFunction<_PortGetNative, _PortGetDart>('fb_settings_get_http_enabled');
+final _setFtpEnabled =
+    _lib.lookupFunction<_PortSetNative, _PortSetDart>('fb_settings_set_ftp_enabled');
+final _getFtpEnabled =
+    _lib.lookupFunction<_PortGetNative, _PortGetDart>('fb_settings_get_ftp_enabled');
+final _setIdleTimeout =
+    _lib.lookupFunction<_PortSetNative, _PortSetDart>('fb_settings_set_idle_timeout');
+final _getIdleTimeout =
+    _lib.lookupFunction<_PortGetNative, _PortGetDart>('fb_settings_get_idle_timeout');
+final _setShowHidden =
+    _lib.lookupFunction<_PortSetNative, _PortSetDart>('fb_settings_set_show_hidden');
+final _getShowHidden =
+    _lib.lookupFunction<_PortGetNative, _PortGetDart>('fb_settings_get_show_hidden');
+
+/// 该服务是否已启用(设置页控制; 未启用则主页不显示、不能启动)。
+bool settingsGetHttpEnabled() => _getHttpEnabled() != 0;
+void settingsSetHttpEnabled(bool on) => _setHttpEnabled(on ? 1 : 0);
+bool settingsGetFtpEnabled() => _getFtpEnabled() != 0;
+void settingsSetFtpEnabled(bool on) => _setFtpEnabled(on ? 1 : 0);
+
+/// HTTP 控制连接空闲超时(秒)。
+int settingsGetIdleTimeout() => _getIdleTimeout();
+void settingsSetIdleTimeout(int secs) => _setIdleTimeout(secs);
+
+/// 网页目录列表是否显示隐藏(点号开头)文件。
+bool settingsGetShowHidden() => _getShowHidden() != 0;
+void settingsSetShowHidden(bool on) => _setShowHidden(on ? 1 : 0);
+
 // ---- ftp ----
 typedef _FtpStartNative = Int32 Function(Pointer<Utf8>, Int32, Pointer<Int32>);
 typedef _FtpStartDart = int Function(Pointer<Utf8>, int, Pointer<Int32>);

@@ -32,9 +32,10 @@ pub fn handle_conn(mut stream: TcpStream, root: Arc<String>) {
         Ok(s) => s,
         Err(_) => return,
     };
-    // 空闲读超时: keep-alive 长连接闲置 90s 自动回收, 释放线程与连接(省后台功耗/资源)
+    // 空闲读超时: keep-alive 长连接闲置自动回收(时间可在设置页自定义), 释放线程与连接(省后台功耗/资源)
+    let timeout_secs = settings::get_idle_timeout().max(5).min(3600) as u64;
     read_stream
-        .set_read_timeout(Some(std::time::Duration::from_secs(90)))
+        .set_read_timeout(Some(std::time::Duration::from_secs(timeout_secs)))
         .ok();
     let mut reader = BufReader::new(read_stream);
     'outer: loop {
@@ -340,7 +341,7 @@ fn serve_dir(w: &mut impl Write, path: &Path, req: &Request, json: bool, keep: b
     if let Ok(rd) = std::fs::read_dir(path) {
         for e in rd.flatten() {
             let n = e.file_name().to_string_lossy().into_owned();
-            if n.starts_with('.') {
+            if n.starts_with('.') && !settings::show_hidden() {
                 continue;
             }
             // file_type 常被 readdir 缓存, 免一次 stat 系统调用(大目录感知更快)
