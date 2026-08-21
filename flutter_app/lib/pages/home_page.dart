@@ -206,7 +206,7 @@ class _HomePageState extends State<HomePage> {
                 if (running)
                   Chip(
                     label: Text(runningText),
-                    backgroundColor: Colors.green.withValues(alpha: .18),
+                    backgroundColor: Colors.green.withOpacity(.18),
                     labelStyle: const TextStyle(color: Colors.green, fontSize: 12),
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
