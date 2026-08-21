@@ -1,7 +1,4 @@
-/// FileBridge Flutter UI —— Rust 核心桥入口。
-///
-/// M1：通过 dart:ffi 调用 Rust 的 C ABI 导出，验证"Flutter -> Rust"最小链路。
-/// 目录列表通过 List<FileInfo> 由 dart:ffi 拉取，真正的传输服务仍复用 Rust 引擎。
+/// FileBridge —— dart:ffi 到 Rust 核心的桥。
 library;
 
 import 'dart:ffi';
@@ -13,27 +10,36 @@ DynamicLibrary _openLib() {
   try {
     return DynamicLibrary.open('libfilebridge_core.so');
   } catch (_) {
-    // CI 桌面/调试环境兜底：允许以进程自身暴露的符号(主要是跑 dart 单元测试)
     return DynamicLibrary.process();
   }
 }
 
-const int _kNullBufferSize = 256;
-
-typedef _GreetNative = Pointer<Utf8> Function(Pointer<Utf8> name);
-typedef _GreetDart = Pointer<Utf8> Function(Pointer<Utf8> name);
-
+// ---- strings ----
+typedef _GreetNative = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef _GreetDart = Pointer<Utf8> Function(Pointer<Utf8>);
 typedef _VersionNative = Pointer<Utf8> Function();
 typedef _VersionDart = Pointer<Utf8> Function();
-
 typedef _FreeNative = Void Function(Pointer<Void>);
 typedef _FreeDart = void Function(Pointer<Void>);
+
+// ---- engine ----
+typedef _EngineStartNative = Int32 Function(Pointer<Utf8>, Int32, Pointer<Int32>);
+typedef _EngineStartDart = int Function(Pointer<Utf8>, int, Pointer<Int32>);
+typedef _EngineStopNative = Int32 Function();
+typedef _EngineStopDart = int Function();
+typedef _EngineRunningNative = Int32 Function();
+typedef _EngineRunningDart = int Function();
 
 final _greet = _lib.lookupFunction<_GreetNative, _GreetDart>('fb_greet');
 final _version = _lib.lookupFunction<_VersionNative, _VersionDart>('fb_version_string');
 final _free = _lib.lookupFunction<_FreeNative, _FreeDart>('fb_free_string');
+final _engineStart =
+    _lib.lookupFunction<_EngineStartNative, _EngineStartDart>('fb_engine_start');
+final _engineStop =
+    _lib.lookupFunction<_EngineStopNative, _EngineStopDart>('fb_engine_stop');
+final _engineRunning =
+    _lib.lookupFunction<_EngineRunningNative, _EngineRunningDart>('fb_engine_is_running');
 
-/// 给用户展示的版本串。
 String rustVersion() {
   final p = _version();
   try {
@@ -43,7 +49,6 @@ String rustVersion() {
   }
 }
 
-/// 问候测试：验证跨 FFI 传参/返回值。
 String rustGreet(String name) {
   final n = name.toNativeUtf8();
   final p = _greet(n.cast());
@@ -55,5 +60,24 @@ String rustGreet(String name) {
   }
 }
 
-// 占位常量，避免无用字段触发静态分析噪音
-const int kNullBufferSize = _kNullBufferSize;
+/// root: 共享根目录。port: 0=自动。返回实际端口；返回 <=0 表示启动失败。
+int engineStart(String root, int port) {
+  final rootPtr = root.toNativeUtf8();
+  final outPort = calloc<Int32>(1);
+  try {
+    final ok = _engineStart(rootPtr.cast(), port, outPort);
+    if (ok <= 0) {
+      return 0;
+    }
+    return outPort.value;
+  } finally {
+    calloc.free(rootPtr);
+    calloc.free(outPort);
+  }
+}
+
+void engineStop() {
+  _engineStop();
+}
+
+bool engineRunning() => _engineRunning() != 0;

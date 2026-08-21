@@ -42,6 +42,23 @@ jobs:
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
 
+      # 生成 Flutter Android 骨架: flutter create 会覆盖已存在文件,
+      # 因此先生成到临时目录, 再把 android/ 拷贝回 flutter_app(保留我们的源码/pubspec)。
+      - name: Generate Flutter Android scaffold
+        run: |
+          set -e
+          TMP=$(mktemp -d)
+          flutter create --org com.filebridge --project-name filebridge_flutter \
+            --platforms=android --no-pub "$TMP/scaffold"
+          cp -r "$TMP/scaffold/android/." flutter_app/android/
+          cd flutter_app
+          flutter pub get
+
+      - name: Patch manifest (INTERNET permission)
+        run: |
+          cd flutter_app
+          bash ci/patch_manifest.sh
+
       - name: Build Rust core (.so) and place into Flutter android jniLibs
         run: |
           set -e
@@ -49,15 +66,6 @@ jobs:
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/25.2.9519653"
           mkdir -p android/app/src/main/jniLibs/arm64-v8a android/app/src/main/jniLibs/armeabi-v7a android/app/src/main/jniLibs/x86_64
           (cd rust && cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 -o ../android/app/src/main/jniLibs build --release)
-
-      # Flutter 的 Android 骨架(含 gradle wrapper/plugin registrant)无法在本地生成,
-      # 在此用 flutter create 生成到 flutter_app 目录,保留含 Android 的最小工程。
-      - name: Generate Flutter Android scaffold
-        run: |
-          cd flutter_app
-          flutter create --org com.filebridge --project-name filebridge_flutter \
-            --platforms=android --no-pub .
-          flutter pub get
 
       - name: Build debug + release APK
         run: |
