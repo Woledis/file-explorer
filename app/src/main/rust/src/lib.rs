@@ -32,7 +32,7 @@ pub extern "system" fn Java_com_filebridge_app_native_FbCore_ping<'local>(
 /// the listener closes. Returns 1 on clean listener bind+run, 0 otherwise.
 #[no_mangle]
 pub extern "system" fn Java_com_filebridge_app_native_FbCore_serveHttp<'local>(
-    env: JNIEnv<'local>,
+    mut env: JNIEnv<'local>,
     _class: JClass<'local>,
     port: jint,
     root: JString<'local>,
@@ -179,7 +179,7 @@ fn dispatch(
     }
 
     let range = parse_range(header(&headers, "range"));
-    send_file(stream, &path, method == "HEAD", range.as_ref(), keep_alive)
+    send_file(stream, &path, method == "HEAD", range, keep_alive)
 }
 
 const MAX_BODY: u64 = 20 * 1024 * 1024 * 1024; // 20 GiB 上传上限
