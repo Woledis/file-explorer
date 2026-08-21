@@ -40,6 +40,38 @@ pub extern "C" fn fb_version_string() -> *mut c_char {
     cstr_new(VERSION)
 }
 
+/// 显式初始化设置文件(幂等). 供 Dart 在实际启停服务前读写口令/端口使用。
+#[no_mangle]
+pub extern "C" fn fb_settings_init(settings_file: *const c_char) -> c_int {
+    let path = read_cstr(settings_file).unwrap_or_default();
+    if !path.is_empty() {
+        settings::init(&path);
+    }
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_set_http_port(p: c_int) -> c_int {
+    settings::set_http_port(p.max(0) as u16);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_get_http_port() -> c_int {
+    settings::get_http_port() as c_int
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_set_ftp_port(p: c_int) -> c_int {
+    settings::set_ftp_port(p.max(0) as u16);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn fb_settings_get_ftp_port() -> c_int {
+    settings::get_ftp_port() as c_int
+}
+
 /// Returns true if running.
 #[no_mangle]
 pub extern "C" fn fb_engine_is_running() -> c_int {
@@ -68,7 +100,13 @@ pub extern "C" fn fb_engine_start(
         settings::init(&settings_path);
     }
 
-    let listener = match std::net::TcpListener::bind(("0.0.0.0", port.max(0) as u16)) {
+    // port==0 时读取已配置的 HTTP 端口(未配置则回退自动分配)
+    let bind_port: u16 = if port == 0 {
+        settings::get_http_port().max(1)
+    } else {
+        port.max(1) as u16
+    };
+    let listener = match std::net::TcpListener::bind(("0.0.0.0", bind_port)) {
         Ok(l) => l,
         Err(_) => return 0,
     };

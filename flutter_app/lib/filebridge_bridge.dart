@@ -6,6 +6,9 @@ import 'package:ffi/ffi.dart';
 
 final DynamicLibrary _lib = _openLib();
 
+/// 访问口令 / HTTP端口 / FTP端口 的统一持久化文件(应用私有目录)。
+const String kSettingsFile = '/data/data/com.filebridge.app/settings.txt';
+
 DynamicLibrary _openLib() {
   try {
     return DynamicLibrary.open('libfilebridge_core.so');
@@ -100,6 +103,40 @@ bool rustSetPassword(String pw) {
     calloc.free(p);
   }
 }
+
+// ---- settings init / ports ----
+typedef _InitNative = Int32 Function(Pointer<Utf8>);
+typedef _InitDart = int Function(Pointer<Utf8>);
+typedef _PortSetNative = Int32 Function(Int32);
+typedef _PortSetDart = int Function(int);
+typedef _PortGetNative = Int32 Function();
+typedef _PortGetDart = int Function();
+
+final _settingsInit = _lib.lookupFunction<_InitNative, _InitDart>('fb_settings_init');
+final _setHttpPort = _lib.lookupFunction<_PortSetNative, _PortSetDart>('fb_settings_set_http_port');
+final _getHttpPort = _lib.lookupFunction<_PortGetNative, _PortGetDart>('fb_settings_get_http_port');
+final _setFtpPort = _lib.lookupFunction<_PortSetNative, _PortSetDart>('fb_settings_set_ftp_port');
+final _getFtpPort = _lib.lookupFunction<_PortGetNative, _PortGetDart>('fb_settings_get_ftp_port');
+
+/// App 启动时初始化设置文件, 保证口令/端口读写针对同一持久化文件。
+void initSettings() {
+  final p = kSettingsFile.toNativeUtf8();
+  try {
+    _settingsInit(p.cast());
+  } finally {
+    calloc.free(p);
+  }
+}
+
+/// HTTP 端口(0=未设置, 服务启动时自动分配).
+int settingsGetHttpPort() => _getHttpPort();
+
+/// FTP 端口(0=未设置, 服务启动时用默认 2121).
+void settingsSetHttpPort(int port) => _setHttpPort(port);
+
+int settingsGetFtpPort() => _getFtpPort();
+
+void settingsSetFtpPort(int port) => _setFtpPort(port);
 
 // ---- ftp ----
 typedef _FtpStartNative = Int32 Function(Pointer<Utf8>, Int32, Pointer<Int32>);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'filebridge_bridge.dart';
 import 'keepalive.dart';
 import 'pages/home_page.dart';
 import 'pages/settings_page.dart';
@@ -7,6 +8,7 @@ import 'pages/vault_page.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  initSettings(); // 初始化设置文件, 保证口令/端口读写在统一持久化文件上
   initKeepAlive();
   runApp(const FileBridgeApp());
 }

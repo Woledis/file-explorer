@@ -21,6 +21,8 @@ class _SettingsPageState extends State<SettingsPage> {
   static const int _ftpPort = 2121;
 
   final _password = TextEditingController();
+  final _httpPortCtrl = TextEditingController();
+  final _ftpPortCtrl = TextEditingController();
   bool _passwordEnabled = false;
   ThemeMode _theme = ThemeMode.system;
   bool _httpOn = false;
@@ -37,10 +39,14 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _load() {
+    final hp = settingsGetHttpPort();
+    final fp = settingsGetFtpPort();
+    _httpPortCtrl.text = hp > 0 ? '$hp' : '';
+    _ftpPortCtrl.text = fp > 0 ? '$fp' : '';
     _passwordEnabled = rustGetPassword().isNotEmpty;
     _httpOn = engineRunning();
     _ftpOn = ftpRunning();
-    _ftpActual = _ftpPort;
+    _ftpActual = _ftpPortCtrl.text.isEmpty ? 2121 : int.tryParse(_ftpPortCtrl.text) ?? 2121;
   }
 
   void _toggleHttp(bool on) {
@@ -91,8 +97,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
   void _toggleFtp(bool on) {
     if (on) {
-      final port = ftpStart(_root, _ftpPort);
-      if (port <= 0) {
+      final def = settingsGetFtpPort();
+      final port = (def > 0 && def <= 65535) ? def : 2121;
+      final actual = ftpStart(_root, port);
+      if (actual <= 0) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('FTP 启动失败, 可能端口被占用')),
         );
@@ -100,7 +108,7 @@ class _SettingsPageState extends State<SettingsPage> {
       }
       setState(() {
         _ftpOn = true;
-        _ftpActual = port;
+        _ftpActual = actual;
       });
       syncKeepAlive();
     } else {
@@ -111,6 +119,26 @@ class _SettingsPageState extends State<SettingsPage> {
       });
       syncKeepAlive();
     }
+  }
+
+  void _savePorts() {
+    final h = _parsePort(_httpPortCtrl.text);
+    final f = _parsePort(_ftpPortCtrl.text);
+    settingsSetHttpPort(h);
+    settingsSetFtpPort(f);
+    setState(() {
+      _httpPortCtrl.text = h > 0 ? '$h' : '';
+      _ftpPortCtrl.text = f > 0 ? '$f' : '';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('端口已保存(重新开启对应服务生效)')),
+    );
+  }
+
+  int _parsePort(String s) {
+    final v = int.tryParse(s.trim());
+    if (v == null || v <= 0) return 0;
+    return v.clamp(0, 65535);
   }
 
   void _savePassword() {
@@ -128,6 +156,8 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _password.dispose();
+    _httpPortCtrl.dispose();
+    _ftpPortCtrl.dispose();
     super.dispose();
   }
 
@@ -163,6 +193,54 @@ class _SettingsPageState extends State<SettingsPage> {
               label: const Text('保存口令'),
             ),
           ),
+          const SizedBox(height: 28),
+          const Text('端口设置',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          const Text(
+            'HTTP 端口留空=自动; FTP 端口留空=2121。保存后重新开启服务生效。',
+            style: TextStyle(color: Colors.grey, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            margin: EdgeInsets.zero,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                children: [
+                  TextField(
+                    controller: _httpPortCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'HTTP 端口(留空自动)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _ftpPortCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'FTP 端口(留空 2121)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.tonalIcon(
+                      onPressed: _savePorts,
+                      icon: const Icon(Icons.save_outlined),
+                      label: const Text('保存端口'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          const Text('服务',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),
           Card(
             margin: EdgeInsets.zero,
@@ -187,7 +265,7 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: Text(
                 _ftpActual > 0 && _ftpOn
                     ? '电脑文件管理器访问: ftp://$_lanIp:$_ftpActual'
-                    : '给电脑提供 FTP 文件共享(端口 $_ftpPort)',
+                    : '给电脑提供 FTP 文件共享(端口 ${settingsGetFtpPort() > 0 ? settingsGetFtpPort() : _ftpPort})',
               ),
               value: _ftpOn,
               onChanged: _toggleFtp,

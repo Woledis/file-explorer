@@ -7,10 +7,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 static PASSWORD: Mutex<Option<String>> = Mutex::new(None);
+static HTTP_PORT: Mutex<Option<u16>> = Mutex::new(None);
+static FTP_PORT: Mutex<Option<u16>> = Mutex::new(None);
 static SETTINGS_PATH: Mutex<Option<PathBuf>> = Mutex::new(None);
 static TLS_INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 const KEY_NAME: &str = "access_password";
+const KEY_HTTP: &str = "http_port";
+const KEY_FTP: &str = "ftp_port";
 
 pub fn set_password(pw: &str) {
     let mut g = PASSWORD.lock().unwrap();
@@ -26,6 +30,25 @@ pub fn get_password() -> String {
 pub fn verify(pw: &str) -> bool {
     let cur = get_password();
     cur.is_empty() || const_time_eq(&cur, pw)
+}
+
+/// 0 表示未设置(服务启动时自动/默认端口).
+pub fn set_http_port(p: u16) {
+    *HTTP_PORT.lock().unwrap() = (p != 0).then_some(p);
+    persist();
+}
+
+pub fn get_http_port() -> u16 {
+    HTTP_PORT.lock().unwrap().unwrap_or(0)
+}
+
+pub fn set_ftp_port(p: u16) {
+    *FTP_PORT.lock().unwrap() = (p != 0).then_some(p);
+    persist();
+}
+
+pub fn get_ftp_port() -> u16 {
+    FTP_PORT.lock().unwrap().unwrap_or(0)
 }
 
 /// 0-length probabilistic equality to reduce timing leak.
@@ -59,9 +82,15 @@ pub fn persist() {
     if let Some(parent) = path.parent() {
         let _ = fs::create_dir_all(parent);
     }
-    let pw = get_password();
+    let (pw, hp, fp) = (
+        get_password(),
+        get_http_port(),
+        get_ftp_port(),
+    );
     if let Ok(mut f) = fs::File::create(&path) {
         let _ = write!(f, "{}={}\n", KEY_NAME, pw);
+        let _ = write!(f, "{}={}\n", KEY_HTTP, hp);
+        let _ = write!(f, "{}={}\n", KEY_FTP, fp);
         let _ = f.sync_all();
     }
 }
@@ -79,9 +108,13 @@ fn load() -> std::io::Result<()> {
     for line in data.lines() {
         if let Some(eq) = line.find('=') {
             let (k, v) = (&line[..eq], &line[eq + 1..]);
-            if k == KEY_NAME {
-                let mut g = PASSWORD.lock().unwrap();
-                *g = Some(v.to_owned());
+            match k {
+                KEY_NAME => *PASSWORD.lock().unwrap() = Some(v.to_owned()),
+                KEY_HTTP => *HTTP_PORT.lock().unwrap() =
+                    v.trim().parse::<u16>().ok().filter(|&p| p != 0),
+                KEY_FTP => *FTP_PORT.lock().unwrap() =
+                    v.trim().parse::<u16>().ok().filter(|&p| p != 0),
+                _ => {}
             }
         }
     }
