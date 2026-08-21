@@ -52,8 +52,8 @@ void initKeepAlive() {
       playSound: false,
     ),
     // 关闭唤醒锁/周期 repeat/开机自启, 空闲不额外耗电
-    foregroundTaskOptions: const ForegroundTaskOptions(
-      eventAction: ForegroundTaskEventAction.none,
+    foregroundTaskOptions: ForegroundTaskOptions(
+      eventAction: ForegroundTaskEventAction.nothing(),
       autoRunOnBoot: false,
       autoRunOnMyPackageReplaced: false,
       allowWakeLock: false,
