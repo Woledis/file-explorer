@@ -6,6 +6,7 @@
 mod auth;
 mod http;
 mod settings;
+mod vault;
 
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int};
@@ -120,6 +121,34 @@ pub extern "C" fn fb_set_password(pw: *const c_char) -> c_int {
 #[no_mangle]
 pub extern "C" fn fb_get_password() -> *mut c_char {
     cstr_new(&settings::get_password())
+}
+
+// ----------------------------------------------------------------- vault
+
+/// 加密 src(dst 为空/失败返回 0)。1 = 成功。
+#[no_mangle]
+pub extern "C" fn fb_vault_encrypt_file(
+    src: *const c_char,
+    dst: *const c_char,
+    password: *const c_char,
+) -> c_int {
+    let src = read_cstr(src).unwrap_or_default();
+    let dst = read_cstr(dst).unwrap_or_default();
+    let pw = read_cstr(password).unwrap_or_default();
+    to_int(vault::encrypt_file(&src, &dst, &pw))
+}
+
+/// 解密 src(口令错误/格式非法返回 0)。1 = 成功。
+#[no_mangle]
+pub extern "C" fn fb_vault_decrypt_file(
+    src: *const c_char,
+    dst: *const c_char,
+    password: *const c_char,
+) -> c_int {
+    let src = read_cstr(src).unwrap_or_default();
+    let dst = read_cstr(dst).unwrap_or_default();
+    let pw = read_cstr(password).unwrap_or_default();
+    to_int(vault::decrypt_file(&src, &dst, &pw))
 }
 
 // ----------------------------------------------------------------- strings

@@ -79,7 +79,8 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _startEngine() {
-    final port = engineStart(_root, 0);
+    final settingsFile = '${Directory.systemTemp.path}/filebridge_settings.txt';
+    final port = engineStart(_root, settingsFile, 0);
     if (port <= 0) {
       if (mounted) {
         setState(() {
