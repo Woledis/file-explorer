@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/widgets.dart';
@@ -52,6 +53,7 @@ void initKeepAlive() {
     ),
     // 关闭唤醒锁/周期 repeat/开机自启, 空闲不额外耗电
     foregroundTaskOptions: const ForegroundTaskOptions(
+      eventAction: ForegroundTaskEventAction.none,
       autoRunOnBoot: false,
       autoRunOnMyPackageReplaced: false,
       allowWakeLock: false,

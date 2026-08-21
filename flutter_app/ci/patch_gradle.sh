@@ -44,3 +44,24 @@ if m:
 
 print('could not enable R8'); sys.exit(1)
 PY
+
+# 前台服务插件(flutter_foreground_task / android_lifecycle)要求 compileSdk>=35,
+# 而 Flutter 3.24.5 默认只到 34, 这里强制升级避免编译失败。
+python3 - "$GRADLE" <<'PY'
+import re, sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+if re.search(r'compileSdk(=|\s)\s*(=\s*)?35\b', s):
+    print('compileSdk already 35'); sys.exit(0)
+new = re.sub(
+    r'compileSdk?\s*=\s*flutter\.compileSdkVersion',
+    'compileSdk = 35', s, count=1)
+new = re.sub(
+    r'compileSdkVersion\s+flutter\.compileSdkVersion',
+    'compileSdk 35', new, count=1)
+if new != s:
+    open(p, 'w', encoding='utf-8').write(new)
+    print('compileSdk -> 35')
+else:
+    print('compileSdk line not found (leaving as-is)')
+PY
