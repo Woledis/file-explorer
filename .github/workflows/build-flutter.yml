@@ -37,8 +37,8 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          # 只编译真机所需 ABI (arm64 + v7), 去掉仅模拟器用的 x86_64, 减小体积与构建耗时
-          rustup target add aarch64-linux-android armv7-linux-androideabi
+          # 只编译真机主流的 64 位 ABI (arm64-v8a), 去除 v7/x86, 最小体积与最快构建
+          rustup target add aarch64-linux-android
 
       - name: Install cargo-ndk
         run: cargo install cargo-ndk --locked
@@ -70,14 +70,14 @@ jobs:
           set -e
           cd flutter_app
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/25.2.9519653"
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a android/app/src/main/jniLibs/armeabi-v7a
-          (cd rust && cargo ndk -t arm64-v8a -t armeabi-v7a -o ../android/app/src/main/jniLibs build --release)
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          (cd rust && cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release)
 
       - name: Build release APK (per-ABI, obfuscated)
         run: |
           cd flutter_app
           flutter build apk --release --split-per-abi \
-            --target-platform android-arm64,android-arm \
+            --target-platform android-arm64 \
             --obfuscate --split-debug-info=build/symbols
 
       - name: Upload Flutter APKs
