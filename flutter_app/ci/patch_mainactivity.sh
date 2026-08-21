@@ -12,8 +12,10 @@ fi
 PKG="${MAIN#*android/app/src/main/kotlin/}"
 PKG="${PKG%/*}"
 PKG="${PKG//\//.}"
-cat > "$MAIN" <<EOF
-package $PKG
+
+# 带引号分隔符: 避免 bash 展开 Kotlin 里的 $packageName (set -u 下会当成未定义变量报错)
+cat > "$MAIN" <<'EOF'
+package __PKG__
 
 import android.content.Intent
 import android.net.Uri
@@ -48,4 +50,6 @@ class MainActivity : FlutterActivity() {
     }
 }
 EOF
+
+sed -i "s|__PKG__|$PKG|g" "$MAIN"
 echo "Patched MainActivity -> $MAIN (package $PKG)"
