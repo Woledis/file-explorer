@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../filebridge_bridge.dart';
+import '../permission_helper.dart';
 
 /// 设置页: 访问口令 + 端口 + 服务启用/禁用 + 安全与目录自定义 + 深浅色切换。
 class SettingsPage extends StatefulWidget {
@@ -23,11 +24,33 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _ftpEnabled = true;
   bool _showHidden = false;
   int _idleSecs = 90;
+  bool _fullStorageGranted = true;
 
   @override
   void initState() {
     super.initState();
     _load();
+    _checkStorage();
+  }
+
+  Future<void> _checkStorage() async {
+    if (!isManageStorageSupported) return;
+    final granted = await isFullStorageGranted();
+    if (mounted) setState(() => _fullStorageGranted = granted);
+  }
+
+  Future<void> _requestFullStorage() async {
+    final granted = await requestFullStorage();
+    if (mounted) {
+      setState(() => _fullStorageGranted = granted);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(granted
+              ? '已获得所有文件访问权限'
+              : '未授权。请到系统设置开启「所有文件访问」后重试'),
+        ),
+      );
+    }
   }
 
   void _load() {
@@ -142,6 +165,43 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           const SizedBox(height: 28),
+          // 存储权限: 仅在未授权时提示引导; 已授权无需任何展示
+          if (isManageStorageSupported && !_fullStorageGranted) ...[
+            const Text('存储权限',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading:
+                          Icon(Icons.warning_amber, color: Colors.orange),
+                      title: Text('未授予「所有文件访问」'),
+                      subtitle: Text(
+                        'Android 11+ 需此权限才能让电脑读到完整目录',
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: _requestFullStorage,
+                        icon: const Icon(Icons.lock_open_outlined),
+                        label: const Text('去授权'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 28),
+          ],
           const Text('端口设置',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
           const SizedBox(height: 4),

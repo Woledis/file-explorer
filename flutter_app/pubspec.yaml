@@ -17,6 +17,8 @@ dependencies:
   # 服务前台化: HTTP/FTP 运行时保持后台存活, 停止即移除(不常驻)
   # 9.x 兼容 CI 的 Flutter 3.24.5 (10.x 需 Flutter>=3.38)
   flutter_foreground_task: ^9.2.2
+  # 存储权限: Android 11+ 访问 /storage/emulated/0 需 MANAGE_EXTERNAL_STORAGE
+  permission_handler: ^11.3.1
 
 dev_dependencies:
   flutter_test:
