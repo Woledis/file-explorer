@@ -68,3 +68,26 @@ s=re.sub(r'android:label="[^"]*"', 'android:label="文件流"', s, count=1)
 open(p,'w',encoding='utf-8').write(s)
 print("app label set to 文件流")
 PY
+
+# 存储访问: Rust 引擎直接 std::fs 读 /storage/emulated/0, 分区存储下必须声明权限。
+# - READ 到 API32、WRITE 到 API29(legacy 模式); API30+ 需 MANAGE_EXTERNAL_STORAGE(用户在系统设置授权).
+# - requestLegacyExternalStorage 令 API<=29 免运行时授权即可列目录/读文件(修复「看不到文件」)。
+python3 - "$MANIFEST" <<'PY'
+import sys
+p=sys.argv[1]
+s=open(p,encoding='utf-8').read()
+perms='''    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+'''
+add=''
+for line in perms.splitlines():
+    if line.strip() and line.strip() not in s:
+        add += line+'\n'
+if add and '<application' in s:
+    s=s.replace('<application', add+'    <application',1)
+if 'requestLegacyExternalStorage' not in s:
+    s=s.replace('android:label="文件流"','android:label="文件流" android:requestLegacyExternalStorage="true"',1)
+open(p,'w',encoding='utf-8').write(s)
+print("storage permissions + legacy injected")
+PY

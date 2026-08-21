@@ -16,28 +16,30 @@ import sys, re
 p = sys.argv[1]
 s = open(p, encoding='utf-8').read()
 
-# shrinkResources(资源收缩) 会把只在 manifest 声明、未被代码引用的存储权限
-# (MANAGE/READ/WRITE_EXTERNAL_STORAGE)当作"未使用资源"删除, 导致系统授权页找不到它们。
-# 因此停用 shrinkResources, 只保留 minifyEnabled(代码收缩/混淆, 体积影响极小)。
+# 存储权限在最终 APK 里丢失的根因: 资源/代码收缩(shrinkResources / R8)会移除
+# 只在 manifest 声明、未被代码引用的 permission。这里显式把 shrinkResources 置为 false
+# (而非仅删行, 防止 AAPT/AGP 默认行为再次收缩 manifest 权限)。
+# 1) 抹掉任何已存在的 shrinkResources true
 s = re.sub(r'\n\s*shrinkResources\s*(=\s*)?true', '', s)
 
-if ('minifyEnabled' in s) or ('isMinifyEnabled' in s):
+# 2) 若尚无显式 shrinkResources false, 在 release 块补上
+if re.search(r'shrinkResources\s*(=\s*)?false', s):
+    print('shrinkResources already false')
+elif 'minifyEnabled true' in s:
+    s = s.replace('minifyEnabled true',
+                  'minifyEnabled true\n            shrinkResources false', 1)
     open(p, 'w', encoding='utf-8').write(s)
-    print('R8 minify already enabled; shrinkResources disabled')
-    sys.exit(0)
-
-m = re.search(r'signingConfig = signingConfigs.getByName\("debug"\)', s)
-if m:
-    s = s.replace(m.group(0), m.group(0) + '\n            minifyEnabled true', 1)
+    print('shrinkResources false added')
 else:
-    m2 = re.search(r'buildTypes\s*\{\s*release.*?\n(\s*)\}', s, re.S)
-    if m2:
-        indent = m2.group(1)
-        s = s[:m2.end()-1] + f'\n{indent}    minifyEnabled true' + s[m2.end()-1:]
+    m = re.search(r'buildTypes\s*\{\s*release.*?\n(\s*)\}', s, re.S)
+    if m:
+        indent = m.group(1)
+        s = s[:m.end()-1] + f'\n{indent}    shrinkResources false' + s[m.end()-1:]
+        open(p, 'w', encoding='utf-8').write(s)
+        print('shrinkResources false added (fallback)')
     else:
-        print('could not enable R8'); sys.exit(1)
-open(p, 'w', encoding='utf-8').write(s)
-print('R8 minifyEnabled enabled (shrinkResources off)')
+        open(p, 'w', encoding='utf-8').write(s)
+        print('warning: could not add shrinkResources=false; leaving as-is')
 PY
 
 # 前台服务插件(flutter_foreground_task / android_lifecycle)要求 compileSdk>=35,
@@ -73,4 +75,52 @@ s = re.sub(r'minSdkVersion\s+flutter\.minSdkVersion', 'minSdkVersion 26', s)
 s = re.sub(r'targetSdkVersion\s+flutter\.targetSdkVersion', 'targetSdkVersion 34', s)
 open(p, 'w', encoding='utf-8').write(s)
 print('targetSdk=34, minSdk=26 pinned')
+PY
+
+# R8 权限被剔除的根因与标准解法: 开启了 R8 代码精简后, 只在 manifest 声明、且代码里
+# 从未引用的 permission 会被 R8 当成「未使用项」从最终 APK 里删除(这解释了为什么
+# FOREGROUND_SERVICE/POST_NOTIFICATIONS(被代码用到的)留存, 而 READ/WRITE/MANAGE_EXTERNAL_STORAGE
+# (只在 manifest 声明、由 NDK 读文件)丢失)。解法:
+#   1) 在 proguard 规则里 keep 住 android.Manifest$permission 常量类, 使其字段不被内联/移除;
+#   2) 让 release 构建把 proguard-rules.pro 纳入 proguardFiles, 使规则真正生效。
+python3 - "$GRADLE" <<'PY'
+import os, re, sys
+p = sys.argv[1]
+root = os.path.dirname(p)
+rules = os.path.join(root, 'proguard-rules.pro')
+
+rule_keep = '-keep class android.Manifest$permission { *; }'
+if os.path.exists(rules):
+    r = open(rules, encoding='utf-8').read()
+    if rule_keep not in r:
+        open(rules, 'a', encoding='utf-8').write('\n' + rule_keep + '\n')
+        print('proguard keep rule appended ->', rules)
+    else:
+        print('proguard keep rule already present')
+else:
+    open(rules, 'w', encoding='utf-8').write('# 保留 manifest 权限常量, 防止 R8 把未引用的权限从最终 APK 剔除\n' + rule_keep + '\n')
+    print('proguard-rules.pro created with keep rule')
+
+s = open(p, encoding='utf-8').read()
+if re.search(r"proguardFiles[^\n]*proguard-rules\.pro", s):
+    print("proguardFiles already wired")
+else:
+    # 优先: 挂在 release 的签名行后 (kts: signingConfig = signingConfigs.getByName("debug") / groovy: signingConfig signingConfigs.debug)
+    s2 = re.sub(
+        r'(signingConfig\s*=\s*signingConfigs\.getByName\("debug"\))',
+        r'\1\n            proguardFiles getDefaultProguardFile(\'proguard-android.txt\'), \'proguard-rules.pro\'',
+        s, count=1)
+    if s2 != s:
+        s = s2; print('proguardFiles wired (kts signing line)')
+    else:
+        # 兜底: 直接塞进 release 块内
+        s3 = re.sub(
+            r'(release\s*\{)',
+            r'\1\n            proguardFiles getDefaultProguardFile(\'proguard-android.txt\'), \'proguard-rules.pro\'',
+            s, count=1)
+        if s3 != s:
+            s = s3; print('proguardFiles wired (release block fallback)')
+        else:
+            print('warning: could not wire proguardFiles; leaving as-is')
+    open(p, 'w', encoding='utf-8').write(s)
 PY

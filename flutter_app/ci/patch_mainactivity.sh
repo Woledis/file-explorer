@@ -24,9 +24,20 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
+// 双保险: 在代码里真正引用存储权限常量。若只靠 proguard keep 规则, 万一规则输入
+// 没接上, R8 仍会把这些只在 manifest 声明、无任何代码引用的权限从最终 APK 剔除。
+// 这里让它们成为被调用的活引用, 随 R8 在代码里留存。
+@Suppress("unused")
+fun keepStoragePermissions(): Array<String> = arrayOf(
+    android.Manifest.permission.MANAGE_EXTERNAL_STORAGE,
+    android.Manifest.permission.READ_EXTERNAL_STORAGE,
+    android.Manifest.permission.WRITE_EXTERNAL_STORAGE,
+)
+
 class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        keepStoragePermissions()
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "filebridge/storage")
             .setMethodCallHandler { call, result ->
                 when (call.method) {

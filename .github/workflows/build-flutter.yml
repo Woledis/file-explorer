@@ -93,6 +93,15 @@ jobs:
       - name: Verify MANAGE_EXTERNAL_STORAGE is in final APK
         run: |
           set -euo pipefail
+          echo "---- merged manifest permissions (pre-packaging) ----"
+          MERGED=$(find flutter_app/build/app/intermediates -path '*merged_manifest*s/AndroidManifest.xml' 2>/dev/null | head -n1)
+          if [ -n "$MERGED" ]; then
+            echo "merged manifest: $MERGED"
+            grep -o 'android.permission.[A-Z_]*' "$MERGED" | sort -u || true
+          else
+            echo "(merged manifest not found)"
+          fi
+          echo "---- final APK ----"
           APK=$(find flutter_app/build/app/outputs/flutter-apk -name '*.apk' | head -n1)
           echo "checking APK: $APK"
           AAPT=$(ls "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | sort -V | tail -n1)
