@@ -30,8 +30,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # 3.47.1: flutter_foreground_task 10.x 要求 Flutter>=3.38
-          flutter-version: '3.47.1'
+          flutter-version: '3.24.5'
           cache: true
 
       - name: Install Rust toolchain
