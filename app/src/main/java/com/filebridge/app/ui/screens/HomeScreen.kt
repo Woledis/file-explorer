@@ -72,6 +72,9 @@ fun HomeScreen(viewModel: AppViewModel) {
                 if (state.ftpRunning && config.ftpEnabled && state.ftpUrl.isNotBlank()) {
                     InfoRow("FTP 地址", state.ftpUrl, Modifier)
                 }
+                if (state.nativeUrl.isNotBlank()) {
+                    InfoRow("原生高速", state.nativeUrl, Modifier)
+                }
                 QrBlock(state)
             }
             SectionCard("已共享") {

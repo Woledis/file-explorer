@@ -20,10 +20,19 @@ object ServerController {
         val encrypted: Boolean = false,
         val ftpRunning: Boolean = false,
         val ftpPort: Int = 0,
+        val nativePort: Int = 0,
+        val nativeToken: String = "",
     ) {
         val scheme: String get() = if (tls) "https" else "http"
         val url: String get() = if (running) "$scheme://$host:$port" else ""
         val ftpUrl: String get() = if (ftpRunning && host.isNotEmpty()) "ftp://$host:$ftpPort" else ""
+        /** Rust 原生高速服务地址(带一次性鉴权 token)。 */
+        val nativeUrl: String
+            get() = if (running && nativePort > 0 && nativeToken.isNotEmpty() && host.isNotEmpty()) {
+                "http://$host:$nativePort/?t=$nativeToken"
+            } else {
+                ""
+            }
     }
 
     private val _state = MutableStateFlow(UiState())

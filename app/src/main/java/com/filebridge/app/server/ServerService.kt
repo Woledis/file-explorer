@@ -20,6 +20,7 @@ import com.filebridge.app.FileBridgeApp
 import com.filebridge.app.MainActivity
 import com.filebridge.app.R
 import com.filebridge.app.data.DocStore
+import com.filebridge.app.native.FbCore
 import com.filebridge.app.util.NetworkUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +28,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
+import java.math.BigInteger
+import java.security.SecureRandom
 import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.launch
 
@@ -95,6 +98,10 @@ class ServerService : Service() {
         if (started) {
             server = srv
             sessionStore = sesStore
+            // Rust 原生高速引擎:仅当 native 库存在时启动于 /storage/emulated/0。
+            // 每次服务启动随机 token,地址变化以降低越权风险。
+            val nativeTok = BigInteger(130, SecureRandom()).toString(32)
+            val nativeUp = FbCore.startEngine(NATIVE_PORT, Environment.getExternalStorageDirectory().path, nativeTok)
             ServerController.update {
                 it.copy(
                     running = true,
@@ -103,6 +110,8 @@ class ServerService : Service() {
                     tls = cfg.tlsEnabled,
                     timeoutMin = cfg.sessionTimeoutMin,
                     encrypted = cfg.encryptionEnabled,
+                    nativePort = if (nativeUp) NATIVE_PORT else 0,
+                    nativeToken = if (nativeUp) nativeTok else "",
                 )
             }
             pollJob = scope.launch {
@@ -160,10 +169,11 @@ class ServerService : Service() {
         server?.stop()
         ftpManager?.stop()
         ftpManager = null
+        FbCore.stopEngine()
         sessionStore?.revokeAll()
         server = null
         sessionStore = null
-        ServerController.update { it.copy(running = false, connections = 0, ftpRunning = false, ftpPort = 0) }
+        ServerController.update { it.copy(running = false, connections = 0, ftpRunning = false, ftpPort = 0, nativePort = 0, nativeToken = "") }
         stopForegroundCompat()
         stopSelf()
     }
@@ -230,5 +240,7 @@ class ServerService : Service() {
         private const val CHANNEL_ID = "filebridge_service"
         private const val NOTIF_ID = 1001
         private const val NanoHTTPSocketReadTimeout = 60_000
+        /** Rust 原生高速服务端口(NanoHTTPD 之外的独立引擎)。 */
+        private const val NATIVE_PORT = 18443
     }
 }

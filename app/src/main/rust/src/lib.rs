@@ -143,11 +143,13 @@ fn dispatch(
         return Ok(false);
     }
 
-    if !token.is_empty()
-        && header(&headers, "authorization")
-            .map(|v| v != &format!("Bearer {}", token))
-            .unwrap_or(true)
-    {
+    // 鉴权: 空 token=开放(本地降级用); 否则需 header Bearer 或 query ?t= 之一匹配。
+    let query_tok = query_token(target);
+    let auth_hdr = header(&headers, "authorization").cloned().unwrap_or_default();
+    let authorized = token.is_empty()
+        || auth_hdr == format!("Bearer {}", token)
+        || (!query_tok.is_empty() && query_tok == token);
+    if !authorized {
         let _ = write_simple(stream, "401", "Unauthorized", None);
         return Ok(false);
     }
@@ -161,8 +163,122 @@ fn dispatch(
         }
     };
 
+    // 目录 → 渲染原生列表; 文件 → 流式下载(GET/HEAD + Range)
+    if let Ok(md) = std::fs::metadata(&path) {
+        if md.is_dir() {
+            return send_listing(stream, &path, &rel, token, keep_alive);
+        }
+    }
+
     let range = parse_range(header(&headers, "range"));
     send_file(stream, &path, method == "HEAD", range.as_ref(), keep_alive)
+}
+
+fn query_token(target: &str) -> String {
+    target
+        .split('?')
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .find_map(|kv| {
+            let mut s = kv.splitn(2, '=');
+            if s.next() == Some("t") {
+                s.next().map(String::from)
+            } else {
+                None
+            }
+        })
+        .unwrap_or_default()
+}
+
+fn send_listing(
+    stream: &mut std::net::TcpStream,
+    dir: &PathBuf,
+    rel: &str,
+    token: &str,
+    keep_alive: bool,
+) -> std::io::Result<bool> {
+    let mut items: Vec<(bool, String)> = Vec::new();
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let n = e.file_name().to_string_lossy().into_owned();
+            if n.starts_with('.') {
+                continue;
+            }
+            let is_dir = e.metadata().map(|m| m.is_dir()).unwrap_or(false);
+            items.push((is_dir, n));
+        }
+    }
+    items.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+
+    let mut html = String::from(
+        "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">\
+         <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
+         <title>文件桥 · 原生服务</title>\
+         <style>body{font-family:system-ui,sans-serif;margin:24px;color:#222}\
+         ul{list-style:none;padding:0}li{padding:6px 4px;border-bottom:1px solid #eee}\
+         a{text-decoration:none;color:#0b57d0;font-size:15px}.up{color:#888}</style>\
+         </head><body><h3>文件桥 · Rust 原生服务（高速）</h3><ul>",
+    );
+
+    if !rel.is_empty() {
+        let mut comps: Vec<&str> = rel.split('/').collect();
+        comps.pop();
+        let up = comps.join("/");
+        html.push_str(&format!(
+            "<li>← <a class=\"up\" href=\"/{up}?t={tk}\">上级目录</a></li>",
+            up = enc(&up),
+            tk = token
+        ));
+    }
+
+    for (is_dir, name) in &items {
+        let child = if rel.is_empty() {
+            name.clone()
+        } else {
+            format!("{rel}/{name}")
+        };
+        let sym = if *is_dir { "📁" } else { "📄" };
+        html.push_str(&format!(
+            "<li><a href=\"/{c}?t={tk}\">{sym} {n}</a></li>",
+            c = enc(&child),
+            tk = token,
+            n = esc(name)
+        ));
+    }
+    html.push_str("</ul></body></html>");
+
+    let conn = if keep_alive { "keep-alive" } else { "close" };
+    write_bytes(
+        stream,
+        &format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: {}\r\n\r\n{}",
+            html.len(),
+            conn,
+            html
+        ),
+    )?;
+    Ok(keep_alive)
+}
+
+/// Percent-encode a URL path segment, keeping '/' separators intact.
+fn enc(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(bytes.len());
+    for &b in bytes {
+        if b == b'/' {
+            out.push('/');
+        } else if b.is_ascii_alphanumeric() || b == b'-' || b == b'_' || b == b'.' {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{:02X}", b));
+        }
+    }
+    out
+}
+
+fn esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
 fn send_file(
@@ -276,7 +392,10 @@ fn parse_range(h: Option<&String>) -> Option<(u64, u64)> {
 }
 
 fn safe_path(root: &str, rel: &str) -> Option<PathBuf> {
-    if rel.is_empty() || rel.starts_with('/') {
+    if rel.is_empty() {
+        return Some(PathBuf::from(root));
+    }
+    if rel.starts_with('/') {
         return None;
     }
     let mut p = PathBuf::from(root);
