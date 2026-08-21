@@ -207,7 +207,8 @@ fn write_listing(stream: &mut TcpStream, dir: &Path, rel: &str, keep: bool) -> s
     html.push_str("</ul></body></html>");
     let body = html;
     let status = if keep { "HTTP/1.1 200 OK\r\nConnection: keep-alive\r\n" } else { "HTTP/1.1 200 OK\r\nConnection: close\r\n" };
-    write_bytes(stream, &format!("{}Content-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", status, body.len(), body))
+    write_bytes(stream, &format!("{}Content-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n\r\n{}", status, body.len(), body))?;
+    Ok(keep)
 }
 
 fn stream_file(stream: &mut TcpStream, path: &Path, md: &std::fs::Metadata, head: bool, keep: bool) -> std::io::Result<bool> {
@@ -232,7 +233,8 @@ fn stream_file(stream: &mut TcpStream, path: &Path, md: &std::fs::Metadata, head
 
 fn write_status(stream: &mut TcpStream, code: u16, reason: &str, keep: bool) -> std::io::Result<bool> {
     let conn = if keep { "keep-alive" } else { "close" };
-    write_bytes(stream, &format!("HTTP/1.1 {} {}\r\nContent-Length: 0\r\nConnection: {}\r\n\r\n", code, reason, conn))
+    write_bytes(stream, &format!("HTTP/1.1 {} {}\r\nContent-Length: 0\r\nConnection: {}\r\n\r\n", code, reason, conn))?;
+    Ok(keep)
 }
 
 fn write_bad(stream: &mut TcpStream) -> std::io::Result<bool> {
