@@ -65,6 +65,11 @@ jobs:
           cd flutter_app
           bash ci/patch_gradle.sh
 
+      - name: Generate launcher icons (per-density mipmap)
+        run: |
+          cd flutter_app
+          dart run flutter_launcher_icons
+
       - name: Build Rust core (.so) and place into Flutter android jniLibs
         run: |
           set -e

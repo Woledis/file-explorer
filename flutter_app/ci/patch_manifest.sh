@@ -57,3 +57,14 @@ if 'ForegroundService' not in s:
 open(p,'w',encoding='utf-8').write(s)
 print("foreground service injected")
 PY
+
+# 桌面显示名: flutter create 默认 label 是工程名, 这里改为产品名「文件流」
+python3 - "$MANIFEST" <<'PY'
+import sys,re
+p=sys.argv[1]
+s=open(p,encoding='utf-8').read()
+# <application ... android:label="xxx" ...> → 改为 文件流
+s=re.sub(r'android:label="[^"]*"', 'android:label="文件流"', s, count=1)
+open(p,'w',encoding='utf-8').write(s)
+print("app label set to 文件流")
+PY

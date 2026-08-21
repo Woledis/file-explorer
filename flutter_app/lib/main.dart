@@ -34,7 +34,7 @@ class _FileBridgeAppState extends State<FileBridgeApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'FileBridge',
+      title: 'FileFlow',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
         useMaterial3: true,
@@ -49,7 +49,7 @@ class _FileBridgeAppState extends State<FileBridgeApp> {
       themeMode: _themeMode,
       home: Scaffold(
         appBar: AppBar(
-          title: const Text('FileBridge'),
+          title: const Text('文件流'),
           actions: [
             IconButton(
               tooltip: '切换外观',

@@ -1,5 +1,5 @@
 name: filebridge_flutter
-description: FileBridge - 局域网文件流转，核心 Rust + Flutter UI.
+description: FileFlow 文件流 - 局域网文件流转，核心 Rust + Flutter UI.
 publish_to: 'none'
 version: 0.1.0
 
@@ -22,6 +22,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # 生成各密度启动图标(CI 在 flutter create 重建 android 后运行)
+  flutter_launcher_icons: ^0.13.1
 
 flutter:
   uses-material-design: true
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/app_icon.png"

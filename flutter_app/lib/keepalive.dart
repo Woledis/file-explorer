@@ -43,7 +43,7 @@ void initKeepAlive() {
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
       channelId: 'filebridge_service',
-      channelName: 'FileBridge 服务',
+      channelName: '文件流服务',
       channelDescription: 'HTTP/FTP 文件服务运行中, 保持后台存活',
       onlyAlertOnce: true,
     ),
@@ -70,7 +70,7 @@ Future<void> _start() async {
   if (await FlutterForegroundTask.isRunningService) return;
   await FlutterForegroundTask.startService(
     serviceId: 256,
-    notificationTitle: 'FileBridge',
+    notificationTitle: '文件流',
     notificationText: 'HTTP / FTP 文件服务正在运行',
     callback: _taskStarterCallback,
   );
