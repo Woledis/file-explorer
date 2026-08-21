@@ -106,9 +106,12 @@ if re.search(r"proguardFiles[^\n]*proguard-rules\.pro", s):
     print("proguardFiles already wired")
 else:
     # 优先: 挂在 release 的签名行后 (kts: signingConfig = signingConfigs.getByName("debug") / groovy: signingConfig signingConfigs.debug)
+    # 注意: 替换串用双引号原样字符串, 让 proguardFiles 里的单引号原样输出(不加反斜杠),
+    # 因为这里会同时命中 groovy(build.gradle) 与 kts(build.gradle.kts) 两种脚手架。
+    line = "            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'\n"
     s2 = re.sub(
         r'(signingConfig\s*=\s*signingConfigs\.getByName\("debug"\))',
-        r'\1\n            proguardFiles getDefaultProguardFile(\'proguard-android.txt\'), \'proguard-rules.pro\'',
+        lambda m: m.group(1) + '\n' + line,
         s, count=1)
     if s2 != s:
         s = s2; print('proguardFiles wired (kts signing line)')
@@ -116,7 +119,7 @@ else:
         # 兜底: 直接塞进 release 块内
         s3 = re.sub(
             r'(release\s*\{)',
-            r'\1\n            proguardFiles getDefaultProguardFile(\'proguard-android.txt\'), \'proguard-rules.pro\'',
+            lambda m: m.group(1) + '\n' + line,
             s, count=1)
         if s3 != s:
             s = s3; print('proguardFiles wired (release block fallback)')
