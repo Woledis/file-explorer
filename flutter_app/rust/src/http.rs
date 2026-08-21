@@ -352,18 +352,21 @@ fn serve_dir(w: &mut impl Write, path: &Path, req: &Request, json: bool, keep: b
         );
     }
 
-    let mut html = format!(
+    let mut html = String::from(
         "<!DOCTYPE html><html lang=\"zh\"><head><meta charset=\"utf-8\">\
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\
          <title>FileBridge</title>\
          <style>body{font-family:system-ui,sans-serif;margin:20px;color:#222}\
          .up{margin:10px 0}.up input{max-width:60%}.up button{padding:6px 14px;margin-left:8px;border:0;border-radius:6px;background:#3949ab;color:#fff;cursor:pointer}\
          ul{list-style:none;padding:0}li{padding:6px 2px;border-bottom:1px solid #eee}\
-         a{text-decoration:none;color:#0b57d0;font-size:15px}</style></head><body><h3>📁 FileBridge /{}</h3>\
+         a{text-decoration:none;color:#0b57d0;font-size:15px}</style></head><body><h3>📁 FileBridge /"
+    );
+    html.push_str(&esc(&rel));
+    html.push_str(
+        "</h3>\
          <div class=\"up\"><input type=\"file\" id=\"f\"><button onclick=\"up()\">上传到此目录</button></div>\
          <script>async function up(){const f=document.getElementById('f').files[0];if(!f)return;const r=await fetch(location.pathname+encodeURIComponent(f.name),{method:'PUT',body:f});if(r.ok)location.reload();else alert('上传失败 '+(r.status||'网络错误'));}</script>\
-         <ul>",
-        esc(&rel),
+         <ul>"
     );
     let up = parent_path(&rel);
     if !up.is_empty() {

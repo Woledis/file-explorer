@@ -14,7 +14,8 @@ const SESSION_COOKIE: &str = "fbsess";
 
 static COUNTER: AtomicU64 = AtomicU64::new(1);
 // 已签发且仍有效的会话 token, 防止伪造/枚举 cookie。
-static ISSUED: Mutex<HashSet<u64>> = Mutex::new(HashSet::new());
+// HashSet::new() 非 const, 故静态初始为 None, 使用时惰性创建。
+static ISSUED: Mutex<Option<HashSet<u64>>> = Mutex::new(None);
 
 fn next_token() -> u64 {
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
@@ -35,7 +36,7 @@ pub fn try_login(password: &str) -> Option<u64> {
         return None;
     }
     let tok = next_token();
-    ISSUED.lock().unwrap().insert(tok);
+    ISSUED.lock().unwrap().get_or_insert_with(HashSet::new).insert(tok);
     Some(tok)
 }
 
@@ -50,7 +51,7 @@ pub fn session_from_cookie(cookie_hdr: Option<&str>) -> Option<u64> {
         let part = part.trim();
         if let Some(v) = part.strip_prefix(&format!("{}=", SESSION_COOKIE)) {
             if let Ok(n) = v.trim().parse::<u64>() {
-                if ISSUED.lock().unwrap().contains(&n) {
+                if ISSUED.lock().unwrap().as_ref().is_some_and(|s| s.contains(&n)) {
                     return Some(n);
                 }
             }
