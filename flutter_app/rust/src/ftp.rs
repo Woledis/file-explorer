@@ -311,7 +311,7 @@ fn list_dir(
     arg: &str,
     nlst: bool,
 ) -> Option<()> {
-    let mut d = data?;
+    let d = data?;
     let dir_path = match to_abs(root, &if arg.is_empty() { cwd.to_string() } else { format!("{}/{}", cwd, arg) }) {
         Some(p) if Path::new(&p).is_dir() => p,
         _ => {
@@ -560,7 +560,7 @@ fn ls_line(name: &str, m: &std::fs::Metadata, now: i64) -> String {
 
 // ---------------------------------------------------------------- generic data transfer
 
-fn open_data(data: Option<TcpListener>, stream: &mut TcpStream) -> Option<TcpStream> {
+fn open_data(data: Option<TcpListener>, _stream: &mut TcpStream) -> Option<TcpStream> {
     let l = data?;
     let ds = l.accept().ok()?.0;
     Some(ds)

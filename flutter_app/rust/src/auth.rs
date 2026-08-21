@@ -66,7 +66,7 @@ fn lock_until(now: i64) {
 }
 
 fn prune(map: &mut HashMap<u64, i64>, now: i64) {
-    map.retain(|_, &ts| now - ts <= SESSION_TTL_NS);
+    map.retain(|_, ts| now - *ts <= SESSION_TTL_NS);
 }
 
 pub fn session_cookie_name() -> &'static str {
