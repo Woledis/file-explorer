@@ -60,6 +60,11 @@ jobs:
           cd flutter_app
           bash ci/patch_manifest.sh
 
+      - name: Patch MainActivity (open all-files-access grant page)
+        run: |
+          cd flutter_app
+          bash ci/patch_mainactivity.sh
+
       - name: Enable R8 minify + shrinkResources (体积/启动优化)
         run: |
           cd flutter_app

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../filebridge_bridge.dart';
 import '../permission_helper.dart';
@@ -33,24 +34,28 @@ class _SettingsPageState extends State<SettingsPage> {
     _checkStorage();
   }
 
+  static const _storageChannel = MethodChannel('filebridge/storage');
+
   Future<void> _checkStorage() async {
     if (!isManageStorageSupported) return;
     final granted = await isFullStorageGranted();
     if (mounted) setState(() => _fullStorageGranted = granted);
   }
 
+  /// 直接跳到系统的「所有文件访问」授权页给本应用授权
+  /// (默认的应用详情页里没有该开关, 用户会找不到本软件; 由原生返回再刷新状态)。
   Future<void> _requestFullStorage() async {
-    final granted = await requestFullStorage();
-    if (mounted) {
-      setState(() => _fullStorageGranted = granted);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(granted
-              ? '已获得所有文件访问权限'
-              : '未授权。请到系统设置开启「所有文件访问」后重试'),
-        ),
-      );
+    try {
+      await _storageChannel.invokeMethod('openAllFilesAccess');
+    } catch (_) {
+      // channel 不可用(非注入构建)时退回插件的系统请求
+      await requestFullStorage();
     }
+    // 用户切到系统开启后返回 App, 重新读取授权状态
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+    final granted = await isFullStorageGranted();
+    setState(() => _fullStorageGranted = granted);
   }
 
   void _load() {
