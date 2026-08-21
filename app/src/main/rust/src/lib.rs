@@ -93,10 +93,12 @@ fn handle_conn(mut stream: std::net::TcpStream, root: &str, token: &str) -> std:
         }
         buf.extend_from_slice(&tmp[..n]);
         if let Some(hd_end) = find_headers_end(&buf) {
-            let head = String::from_utf8_lossy(&buf[..hd_end]);
-            match dispatch(&head, &mut stream, root, token) {
+            let head = String::from_utf8_lossy(&buf[..hd_end]).into_owned();
+            let body_pref = &buf[hd_end + 4..];
+            match dispatch(&head, body_pref, &mut stream, root, token) {
                 Ok(keep) if keep => {
                     buf.drain(..hd_end + 4);
+                    buf.clear(); // 头部之后预留的 body 已被 PUT 消费,清空等待下一请求
                     if buf.is_empty() {
                         continue;
                     }
@@ -109,9 +111,11 @@ fn handle_conn(mut stream: std::net::TcpStream, root: &str, token: &str) -> std:
 }
 
 /// Returns Ok(true) when `Connection: keep-alive` was honoured (more requests
-/// may follow on the same socket).
+/// may follow on the same socket). `body_pref` carries bytes already buffered
+/// past the header terminator (needed for PUT).
 fn dispatch(
     head: &str,
+    body_pref: &[u8],
     stream: &mut std::net::TcpStream,
     root: &str,
     token: &str,
@@ -138,7 +142,7 @@ fn dispatch(
         .map(|v| v.eq_ignore_ascii_case("keep-alive"))
         .unwrap_or(false);
 
-    if method != "GET" && method != "HEAD" {
+    if method != "GET" && method != "HEAD" && method != "PUT" {
         let _ = write_simple(stream, "405", "Method Not Allowed", None);
         return Ok(false);
     }
@@ -163,6 +167,10 @@ fn dispatch(
         }
     };
 
+    if method == "PUT" {
+        return handle_put(stream, &headers, &path, body_pref, keep_alive);
+    }
+
     // 目录 → 渲染原生列表; 文件 → 流式下载(GET/HEAD + Range)
     if let Ok(md) = std::fs::metadata(&path) {
         if md.is_dir() {
@@ -172,6 +180,76 @@ fn dispatch(
 
     let range = parse_range(header(&headers, "range"));
     send_file(stream, &path, method == "HEAD", range.as_ref(), keep_alive)
+}
+
+const MAX_BODY: u64 = 20 * 1024 * 1024 * 1024; // 20 GiB 上传上限
+
+/// Upload: writes `Content-Length` body to [path] via a temp file + atomic
+/// rename. Parent dir must already exist. Connection always closes afterwards.
+fn handle_put(
+    stream: &mut std::net::TcpStream,
+    headers: &[(String, String)],
+    path: &PathBuf,
+    body_pref: &[u8],
+    _keep_alive: bool,
+) -> std::io::Result<bool> {
+    let len: u64 = match header(headers, "content-length").and_then(|s| s.trim().parse().ok()) {
+        Some(l) => l,
+        None => {
+            let _ = write_simple(stream, "400", "Bad Request", None);
+            return Ok(false);
+        }
+    };
+    if len > MAX_BODY {
+        let _ = write_simple(stream, "413", "Payload Too Large", None);
+        return Ok(false);
+    }
+    let parent_ok = path.parent().map(|p| p.is_dir()).unwrap_or(false);
+    if !parent_ok {
+        let _ = write_simple(stream, "409", "Conflict", None);
+        return Ok(false);
+    }
+
+    let tmp = path.with_extension("part");
+    let mut f = match std::fs::File::create(&tmp) {
+        Ok(f) => f,
+        Err(_) => {
+            let _ = write_simple(stream, "403", "Forbidden", None);
+            return Ok(false);
+        }
+    };
+
+    let mut left = len;
+    let pref_n = std::cmp::min(left as usize, body_pref.len());
+    if pref_n > 0 {
+        f.write_all(&body_pref[..pref_n])?;
+        left -= pref_n as u64;
+    }
+    let mut b = vec![0u8; IO_BUF];
+    while left > 0 {
+        let want = std::cmp::min(IO_BUF, left as usize);
+        let n = stream.read(&mut b[..want])?;
+        if n == 0 {
+            drop(f);
+            let _ = std::fs::remove_file(&tmp);
+            return Ok(false);
+        }
+        f.write_all(&b[..n])?;
+        left -= n as u64;
+    }
+    f.sync_all()?;
+    drop(f);
+
+    if std::fs::rename(&tmp, path).is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        let _ = write_simple(stream, "500", "Internal Server Error", None);
+        return Ok(false);
+    }
+    write_bytes(
+        stream,
+        "HTTP/1.1 201 Created\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    )?;
+    Ok(false)
 }
 
 fn query_token(target: &str) -> String {
